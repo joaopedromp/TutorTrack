@@ -1,0 +1,1852 @@
+import { CoursePicker } from "./CoursePicker";
+import { SessionSchedule } from "./SessionSchedule";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useId,
+  Children,
+  cloneElement,
+  isValidElement,
+  type ReactNode,
+  type ReactElement,
+  type FormEvent,
+} from "react";
+import { useLiveQuery } from "dexie-react-hooks";
+import {
+  LayoutDashboard,
+  CalendarDays,
+  NotebookPen,
+  Users,
+  Wallet,
+  Settings as SettingsIcon,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpRight,
+  Clock,
+  Check,
+  X,
+  Search,
+  Download,
+  Upload,
+  RefreshCw,
+  Link,
+  Trash2,
+  BookOpen,
+} from "lucide-react";
+import {
+  courseLabel,
+  type Course,
+  nextPaycheck,
+  sessionWithHours,
+  saveSessionEntry,
+  db,
+  uid,
+  now,
+  defaults,
+  initialize,
+  localDate,
+  weekRange,
+  totals,
+  inRange,
+  periodFor,
+  money,
+  hours,
+  fmtDate,
+  fmtTime,
+  duration,
+  courseId,
+  studentSchema,
+  sessionSchema,
+  paymentSchema,
+  settingsSchema,
+  deleteSession,
+  exportData,
+  importData,
+  validateBackup,
+  type Student,
+  type Session,
+  type Period,
+  type Payment,
+  type Settings,
+} from "./data";
+
+type Page =
+  | "Dashboard"
+  | "Calendar"
+  | "Sessions"
+  | "Students"
+  | "Payroll"
+  | "Settings";
+const nav = [
+  ["Dashboard", LayoutDashboard],
+  ["Calendar", CalendarDays],
+  ["Sessions", NotebookPen],
+  ["Students", Users],
+  ["Payroll", Wallet],
+  ["Settings", SettingsIcon],
+] as const;
+const inputTime = (s: string) => {
+  if (!s) return "";
+  const d = new Date(s);
+  return (
+    localDate(d) +
+    "T" +
+    String(d.getHours()).padStart(2, "0") +
+    ":" +
+    String(d.getMinutes()).padStart(2, "0")
+  );
+};
+const iso = (s: string) => (s ? new Date(s).toISOString() : "");
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  const fieldId = useId();
+  return (
+    <div className="field">
+      <label htmlFor={fieldId}>{label}</label>
+      {Children.map(children, (child) =>
+        isValidElement(child) &&
+        ["input", "select", "textarea"].includes(String(child.type))
+          ? cloneElement(child as ReactElement<{ id: string }>, { id: fieldId })
+          : child,
+      )}
+    </div>
+  );
+}
+function Modal({
+  title,
+  children,
+  close,
+}: {
+  title: string;
+  children: ReactNode;
+  close: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    ref.current?.showModal();
+  }, []);
+  return (
+    <dialog ref={ref} onCancel={close}>
+      <header>
+        <h2>{title}</h2>
+        <button
+          type="button"
+          className="icon"
+          onClick={close}
+          aria-label="Close"
+          title="Close"
+        >
+          <X size={19} />
+        </button>
+      </header>
+      {children}
+    </dialog>
+  );
+}
+function Empty({
+  text,
+  action,
+  click,
+}: {
+  text: string;
+  action?: string;
+  click?: () => void;
+}) {
+  return (
+    <div className="empty">
+      <BookOpen size={26} />
+      <p>{text}</p>
+      {action && (
+        <button onClick={click} className="secondary">
+          {action}
+          <Plus size={15} />
+        </button>
+      )}
+    </div>
+  );
+}
+export default function App() {
+  const [page, setPage] = useState<Page>("Dashboard");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [studentEdit, setStudentEdit] = useState<Student | "new" | null>(null);
+  const [sessionEdit, setSessionEdit] = useState<Session | "new" | null>(null);
+  const [profile, setProfile] = useState<Student | null>(null);
+  const [payEdit, setPayEdit] = useState<Period | null>(null);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [course, setCourse] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [order, setOrder] = useState("newest");
+  const [showArchived, setShowArchived] = useState(false);
+  const [calendarView, setCalendarView] = useState<"month" | "week">("month");
+  const [anchor, setAnchor] = useState(new Date());
+  const [history, setHistory] = useState(false);
+  const data = useLiveQuery(async () => ({
+    students: await db.students.toArray(),
+    courses: await db.courses.toArray(),
+    sessions: (await db.sessions.toArray()).filter((s) => !s.deleted),
+    periods: await db.periods.toArray(),
+    payments: await db.payments.toArray(),
+    settings: (await db.settings.get("settings")) || defaults,
+    sync: await db.sync.toArray(),
+  }));
+  useEffect(() => {
+    initialize().catch((e) => setError(String(e)));
+  }, []);
+  async function act(fn: () => Promise<unknown>) {
+    try {
+      setError("");
+      await fn();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+  if (!data) return <div className="loading">Opening TutorTrack…</div>;
+  const {
+    students,
+    courses,
+    sessions,
+    periods,
+    payments,
+    settings,
+    sync: records,
+  } = data;
+  const studentName = (s: Session) =>
+    students.find((x) => x.id === s.studentId)?.name || "Assign student";
+  const courseName = (id: string) =>
+    courseLabel(courses.find((x) => x.id === id));
+  const today = localDate(new Date());
+  const week = weekRange();
+  const current = periods.find((p) => p.start <= today && p.end >= today);
+  const weekly = totals(
+    sessions.filter((s) => inRange(s, week.start, week.end)),
+    settings,
+  );
+  const periodSessions = (p: Period) =>
+    sessions.filter((s) => periodFor(s, periods)?.id === p.id);
+  const periodTotal = totals(current ? periodSessions(current) : [], settings);
+  const upcoming = sessions
+    .filter(
+      (s) =>
+        s.status === "scheduled" && !s.eventCancelled && s.scheduledEnd > now(),
+    )
+    .sort((a, b) => a.scheduledStart.localeCompare(b.scheduledStart));
+  const soon = upcoming.filter((s) => localDate(s.scheduledStart) <= week.end);
+  const upcomingDays = [
+    ...new Set(upcoming.map((s) => localDate(s.scheduledStart))),
+  ];
+  const nextSubmit = periods
+    .filter((p) => p.submit >= today)
+    .sort((a, b) => a.submit.localeCompare(b.submit))[0];
+  const nextPay = periods
+    .filter(
+      (p) =>
+        p.pay >= today &&
+        payments.find((x) => x.periodId === p.id)?.status !== "paid",
+    )
+    .sort((a, b) => a.pay.localeCompare(b.pay))[0];
+  const paycheck = nextPaycheck(sessions, periods, payments, settings, today);
+  const paymentStatus = (p: Period) => {
+    const saved = payments.find((x) => x.periodId === p.id);
+    return saved?.status === "paid"
+      ? "paid"
+      : p.pay < today
+        ? "overdue"
+        : saved?.status || "upcoming";
+  };
+  const openPage = (p: Page) => {
+    setPage(p);
+    setSearch("");
+    setProfile(null);
+  };
+  const list = (ss: Session[], empty = "No sessions yet") => (
+    <div className="session-list">
+      {ss.length ? (
+        ss.map((s) => (
+          <button
+            className="session-row"
+            key={s.id}
+            onClick={() => setSessionEdit(s)}
+          >
+            <span className={"status-icon " + s.status}>
+              {s.status === "completed" ? (
+                <Check size={17} />
+              ) : s.status === "cancelled" ? (
+                <X size={17} />
+              ) : (
+                <Clock size={17} />
+              )}
+            </span>
+            <span className="session-person">
+              <strong>{studentName(s)}</strong>
+              <small>
+                {courseName(s.courseId)}
+                {s.topics ? " · " + s.topics : ""}
+              </small>
+            </span>
+            <span className="session-date">
+              {fmtDate(s.scheduledStart)}
+              <small>
+                {fmtTime(s.scheduledStart)}–{fmtTime(s.scheduledEnd)}
+              </small>
+            </span>
+            <span className="session-pay">
+              {s.status === "completed" ? (
+                money(totals([s], settings).gross)
+              ) : (
+                <span className={"badge " + s.status}>{s.status}</span>
+              )}
+              <small>
+                {s.status === "completed"
+                  ? hours(duration(s.actualStart, s.actualEnd)) + " h actual"
+                  : hours(duration(s.scheduledStart, s.scheduledEnd)) +
+                    " h scheduled"}
+              </small>
+            </span>
+            <ChevronRight size={16} />
+          </button>
+        ))
+      ) : (
+        <Empty
+          text={empty}
+          action="Add session"
+          click={() => setSessionEdit("new")}
+        />
+      )}
+    </div>
+  );
+  const metric = (label: string, value: string, sub?: string) => (
+    <div className="metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {sub && <small>{sub}</small>}
+    </div>
+  );
+  let calendarStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  if (calendarView === "week") calendarStart = new Date(anchor);
+  calendarStart.setDate(calendarStart.getDate() - calendarStart.getDay());
+  calendarStart.setHours(0, 0, 0, 0);
+  const calendarDays = Array.from(
+    { length: calendarView === "week" ? 7 : 42 },
+    (_, i) => {
+      const d = new Date(calendarStart);
+      d.setDate(d.getDate() + i);
+      return d;
+    },
+  );
+  return (
+    <div className="app">
+      <aside>
+        <a
+          className="brand"
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            openPage("Dashboard");
+          }}
+        >
+          <span className="brand-icon">
+            <BookOpen size={21} />
+          </span>
+          TutorTrack
+        </a>
+        <div className="sidebar-caption">WORKSPACE</div>
+        <nav>
+          {nav.map(([p, Icon]) => (
+            <button
+              key={p}
+              title={p}
+              onClick={() => openPage(p)}
+              className={page === p ? "selected" : ""}
+              aria-current={page === p ? "page" : undefined}
+            >
+              <Icon size={19} />
+              {p}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
+          <span className="local-mark" />
+          Stored on this device<small>Entirely local</small>
+        </div>
+      </aside>
+      <main>
+        <header className="page-header">
+          <div>
+            <div className="eyebrow">
+              {new Date().toLocaleDateString("en-CA", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              })}
+            </div>
+            <h1>{page}</h1>
+          </div>
+          <div className="header-actions">
+            {page !== "Settings" && (
+              <button
+                className="primary"
+                onClick={() =>
+                  page === "Students"
+                    ? setStudentEdit("new")
+                    : setSessionEdit("new")
+                }
+              >
+                <Plus size={17} />
+                {page === "Students" ? "Add student" : "Add session"}
+              </button>
+            )}
+          </div>
+        </header>
+        {error && (
+          <div className="alert" role="alert">
+            {error}
+            <button
+              className="icon"
+              onClick={() => setError("")}
+              aria-label="Dismiss error"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+        {notice && (
+          <div className="notice" role="status">
+            {notice}
+          </div>
+        )}
+        {page === "Dashboard" && (
+          <div className="dashboard-content">
+            <section
+              className="panel paycheck-panel"
+              aria-label="Next paycheck"
+            >
+              <div>
+                <span className="eyebrow">NEXT PAYCHECK</span>
+                <h2>
+                  {paycheck
+                    ? fmtDate(paycheck.period.pay)
+                    : "No upcoming payday"}
+                </h2>
+                {paycheck ? (
+                  <p className="hint">
+                    {hours(paycheck.mins)} hours ·{" "}
+                    {fmtDate(paycheck.period.start)} –{" "}
+                    {fmtDate(paycheck.period.end)}
+                  </p>
+                ) : (
+                  <p className="hint">
+                    No unpaid future payroll period is configured.
+                  </p>
+                )}
+              </div>
+              {paycheck && (
+                <>
+                  <div className="paycheck-amount">
+                    <strong>{money(paycheck.net)}</strong>
+                    <span>Estimated take-home</span>
+                    <small>
+                      {money(paycheck.gross)} gross · {settings.deduction}%{" "}
+                      {settings.deductionBasis === "provisional"
+                        ? "provisional deduction"
+                        : "deductions"}
+                    </small>
+                  </div>
+                  <button
+                    className="secondary"
+                    onClick={() => setPayEdit(paycheck.period)}
+                  >
+                    View paycheck
+                    <ArrowUpRight size={16} />
+                  </button>
+                </>
+              )}
+            </section>
+            <div className="section-line">
+              <h2>This week</h2>
+              <span>
+                {fmtDate(week.start)} – {fmtDate(week.end)}
+              </span>
+            </div>
+            <div className="metrics">
+              {metric(
+                "Hours worked",
+                hours(weekly.mins),
+                "Completed actual time",
+              )}
+              {metric(
+                "Gross earnings",
+                money(weekly.gross),
+                money(settings.wage) + " / hour",
+              )}
+              {metric(
+                "Est. take-home",
+                money(weekly.net),
+                settings.deduction + "% estimated deductions",
+              )}
+            </div>
+            <div className="dashboard-bottom">
+              <section className="panel">
+                <div className="section-line">
+                  <h2>Recent sessions</h2>
+                  <button
+                    className="text-button"
+                    onClick={() => openPage("Sessions")}
+                  >
+                    View all
+                    <ChevronRight size={15} />
+                  </button>
+                </div>
+                {list(
+                  sessions
+                    .filter((s) => s.status === "completed")
+                    .sort((a, b) => b.actualStart.localeCompare(a.actualStart))
+                    .slice(0, 2),
+                  "Your completed sessions will appear here",
+                )}
+              </section>
+              <section className="panel next-panel">
+                <div className="section-line">
+                  <h2>
+                    Upcoming sessions{" "}
+                    <span className="count-badge">{upcoming.length}</span>
+                  </h2>
+                  <button
+                    className="text-button"
+                    onClick={() => openPage("Calendar")}
+                  >
+                    Calendar
+                    <CalendarDays size={16} />
+                  </button>
+                </div>
+                <p className="upcoming-summary">
+                  {soon.length} remaining this week ·{" "}
+                  {hours(
+                    soon.reduce(
+                      (sum, s) =>
+                        sum + duration(s.scheduledStart, s.scheduledEnd),
+                      0,
+                    ),
+                  )}{" "}
+                  hours
+                </p>
+                <div className="upcoming-agenda">
+                  {upcomingDays.length ? (
+                    upcomingDays.map((day) => (
+                      <div className="agenda-day" key={day}>
+                        <h3>
+                          {day === today
+                            ? "Today"
+                            : new Date(day + "T12:00:00").toLocaleDateString(
+                                "en-CA",
+                                {
+                                  weekday: "short",
+                                  month: "short",
+                                  day: "numeric",
+                                },
+                              )}
+                        </h3>
+                        {upcoming
+                          .filter((s) => localDate(s.scheduledStart) === day)
+                          .map((s) => (
+                            <button
+                              className="agenda-session"
+                              key={s.id}
+                              onClick={() => setSessionEdit(s)}
+                            >
+                              <span className="agenda-time">
+                                {fmtTime(s.scheduledStart)}
+                                <small>{fmtTime(s.scheduledEnd)}</small>
+                              </span>
+                              <span>
+                                <strong>{studentName(s)}</strong>
+                                <small>{courseName(s.courseId)}</small>
+                              </span>
+                              <ChevronRight size={15} />
+                            </button>
+                          ))}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty compact">
+                      <p>No upcoming sessions</p>
+                      <button
+                        className="text-button"
+                        onClick={() => setSessionEdit("new")}
+                      >
+                        Schedule a session
+                        <Plus size={15} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
+          </div>
+        )}
+        {page === "Sessions" && (
+          <>
+            <div className="filters">
+              <label className="search">
+                <Search size={17} />
+                <input
+                  aria-label="Search sessions by student"
+                  placeholder="Search student"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </label>
+              <select
+                aria-label="Course filter"
+                value={course}
+                onChange={(e) => setCourse(e.target.value)}
+              >
+                <option value="">All courses</option>
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {courseLabel(c)}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="Status filter"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                <option value="">All statuses</option>
+                <option>scheduled</option>
+                <option>completed</option>
+                <option>cancelled</option>
+              </select>
+              <input
+                aria-label="From date"
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+              />
+              <input
+                aria-label="To date"
+                type="date"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+              />
+              <select
+                aria-label="Sort order"
+                value={order}
+                onChange={(e) => setOrder(e.target.value)}
+              >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+              </select>
+            </div>
+            {sessions.some((s) => !s.studentId) && (
+              <p className="hint">
+                Imported sessions need a student and course. Open each session
+                to assign them.
+              </p>
+            )}
+            <section className="panel">
+              {list(
+                sessions
+                  .filter(
+                    (s) =>
+                      studentName(s)
+                        .toLowerCase()
+                        .includes(search.toLowerCase()) &&
+                      (!course || s.courseId === course) &&
+                      (!status || s.status === status) &&
+                      (!from || localDate(s.scheduledStart) >= from) &&
+                      (!to || localDate(s.scheduledStart) <= to),
+                  )
+                  .sort(
+                    (a, b) =>
+                      (order === "newest" ? -1 : 1) *
+                      a.scheduledStart.localeCompare(b.scheduledStart),
+                  ),
+                "No matching sessions",
+              )}
+            </section>
+            <p className="hint">
+              Date filters use scheduled dates. Pay uses completed actual time.
+            </p>
+          </>
+        )}
+        {page === "Students" && (
+          <>
+            {profile ? (
+              <>
+                <button
+                  className="text-button back"
+                  onClick={() => setProfile(null)}
+                >
+                  <ChevronLeft size={16} />
+                  All students
+                </button>
+                <section className="panel">
+                  <div className="section-line">
+                    <div>
+                      <h2>{profile.name}</h2>
+                      <p className="muted">
+                        {courseName(profile.courseId)}
+                        {profile.archived ? " · Archived" : ""}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() =>
+                        setStudentEdit(
+                          students.find((s) => s.id === profile.id) || profile,
+                        )
+                      }
+                    >
+                      Edit student
+                    </button>
+                  </div>
+                  {profile.note && <p>{profile.note}</p>}
+                  <div className="metrics profile-metrics">
+                    {metric(
+                      "Completed sessions",
+                      String(
+                        sessions.filter(
+                          (s) =>
+                            s.studentId === profile.id &&
+                            s.status === "completed",
+                        ).length,
+                      ),
+                    )}
+                    {metric(
+                      "Actual hours",
+                      hours(
+                        totals(
+                          sessions.filter((s) => s.studentId === profile.id),
+                          settings,
+                        ).mins,
+                      ),
+                    )}
+                    {metric(
+                      "Gross earnings",
+                      money(
+                        totals(
+                          sessions.filter((s) => s.studentId === profile.id),
+                          settings,
+                        ).gross,
+                      ),
+                    )}
+                  </div>
+                </section>
+                <h2 className="spaced">Upcoming sessions</h2>
+                <section className="panel">
+                  {list(
+                    sessions.filter(
+                      (s) =>
+                        s.studentId === profile.id &&
+                        s.status === "scheduled" &&
+                        s.scheduledStart >= now(),
+                    ),
+                  )}
+                </section>
+                <h2 className="spaced">Complete history</h2>
+                <section className="panel">
+                  {sessions
+                    .filter((s) => s.studentId === profile.id)
+                    .sort((a, b) =>
+                      b.scheduledStart.localeCompare(a.scheduledStart),
+                    )
+                    .map((s) => (
+                      <div key={s.id}>
+                        {list([s])}
+                        {(s.topics || s.notes) && (
+                          <div className="history-notes">
+                            {s.topics && (
+                              <p>
+                                <strong>Topics</strong> {s.topics}
+                              </p>
+                            )}
+                            {s.notes && (
+                              <p>
+                                <strong>Notes</strong> {s.notes}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </section>
+              </>
+            ) : (
+              <>
+                <div className="filters">
+                  <label className="search">
+                    <Search size={17} />
+                    <input
+                      aria-label="Search students"
+                      placeholder="Search students"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                  </label>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={showArchived}
+                      onChange={(e) => setShowArchived(e.target.checked)}
+                    />
+                    Include archived
+                  </label>
+                </div>
+                <div className="student-grid">
+                  {students
+                    .filter(
+                      (s) =>
+                        (showArchived || !s.archived) &&
+                        s.name.toLowerCase().includes(search.toLowerCase()),
+                    )
+                    .map((s) => (
+                      <button
+                        className="student-card"
+                        key={s.id}
+                        onClick={() => setProfile(s)}
+                      >
+                        <div className="section-line">
+                          <span className="avatar">
+                            {s.name
+                              .split(" ")
+                              .map((v) => v[0])
+                              .slice(0, 2)
+                              .join("")}
+                          </span>
+                          <ChevronRight size={17} />
+                        </div>
+                        <h2>{s.name}</h2>
+                        <p>{courseName(s.courseId)}</p>
+                        <div className="student-footer">
+                          <span>
+                            {hours(
+                              totals(
+                                sessions.filter((x) => x.studentId === s.id),
+                                settings,
+                              ).mins,
+                            )}{" "}
+                            h completed
+                          </span>
+                          {s.archived && <span>Archived</span>}
+                        </div>
+                      </button>
+                    ))}
+                </div>
+                {!students.filter(
+                  (s) =>
+                    (showArchived || !s.archived) &&
+                    s.name.toLowerCase().includes(search.toLowerCase()),
+                ).length && (
+                  <section className="panel">
+                    <Empty
+                      text="Keep your students and session history together"
+                      action="Add student"
+                      click={() => setStudentEdit("new")}
+                    />
+                  </section>
+                )}
+              </>
+            )}
+          </>
+        )}
+        {page === "Calendar" && (
+          <>
+            <div className="calendar-toolbar">
+              <div className="inline">
+                <button
+                  className="icon"
+                  aria-label="Previous"
+                  title="Previous"
+                  onClick={() => {
+                    const d = new Date(anchor);
+                    calendarView === "month"
+                      ? d.setMonth(d.getMonth() - 1)
+                      : d.setDate(d.getDate() - 7);
+                    setAnchor(d);
+                  }}
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <h2>
+                  {anchor.toLocaleDateString("en-CA", {
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </h2>
+                <button
+                  className="icon"
+                  aria-label="Next"
+                  title="Next"
+                  onClick={() => {
+                    const d = new Date(anchor);
+                    calendarView === "month"
+                      ? d.setMonth(d.getMonth() + 1)
+                      : d.setDate(d.getDate() + 7);
+                    setAnchor(d);
+                  }}
+                >
+                  <ChevronRight size={18} />
+                </button>
+                <button onClick={() => setAnchor(new Date())}>Today</button>
+              </div>
+              <div className="segmented">
+                <button
+                  className={calendarView === "month" ? "active" : ""}
+                  onClick={() => setCalendarView("month")}
+                >
+                  Month
+                </button>
+                <button
+                  className={calendarView === "week" ? "active" : ""}
+                  onClick={() => setCalendarView("week")}
+                >
+                  Week
+                </button>
+              </div>
+            </div>
+            <div className="calendar-caption">
+              <span>
+                {current
+                  ? `Current payroll: ${fmtDate(current.start)} – ${fmtDate(current.end)} · Pay ${fmtDate(current.pay)}`
+                  : "No active payroll period"}
+              </span>
+              <span>
+                Scheduled · <b>Completed</b> · <s>Cancelled</s>
+              </span>
+            </div>
+            <div className={"calendar " + calendarView}>
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                <div className="weekday" key={d}>
+                  {d}
+                </div>
+              ))}
+              {calendarDays.map((d) => (
+                <div
+                  className={
+                    "day " +
+                    (d.getMonth() !== anchor.getMonth() ? "outside" : "")
+                  }
+                  key={localDate(d)}
+                >
+                  <span
+                    className={
+                      localDate(d) === today ? "today day-number" : "day-number"
+                    }
+                  >
+                    {d.getDate()}
+                  </span>
+                  {periods
+                    .filter((p) => p.pay === localDate(d))
+                    .map((p) => (
+                      <small className="pay-day" key={p.id}>
+                        Pay date
+                      </small>
+                    ))}
+                  {sessions
+                    .filter(
+                      (s) =>
+                        localDate(s.scheduledStart) <= localDate(d) &&
+                        localDate(s.scheduledEnd) >= localDate(d),
+                    )
+                    .sort((a, b) =>
+                      a.scheduledStart.localeCompare(b.scheduledStart),
+                    )
+                    .map((s) => (
+                      <button
+                        key={s.id}
+                        className={"calendar-event " + s.status}
+                        onClick={() => setSessionEdit(s)}
+                      >
+                        <strong>{studentName(s)}</strong>
+                        <span>{courseName(s.courseId)}</span>
+                        <span>
+                          {fmtTime(s.scheduledStart)} · {s.status}
+                        </span>
+                        {s.status === "completed" && (
+                          <span>
+                            {hours(duration(s.actualStart, s.actualEnd))} h ·{" "}
+                            {money(totals([s], settings).gross)}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        {page === "Payroll" && (
+          <>
+            <div className="section-line">
+              <div className="segmented">
+                <button
+                  className={!history ? "active" : ""}
+                  onClick={() => setHistory(false)}
+                >
+                  Payroll periods
+                </button>
+                <button
+                  className={history ? "active" : ""}
+                  onClick={() => setHistory(true)}
+                >
+                  Payment history
+                </button>
+              </div>
+              <span className="muted">CAD</span>
+            </div>
+            <section className="panel table-panel">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Covered dates</th>
+                    <th>Hours</th>
+                    <th>Gross</th>
+                    <th>Est. take-home</th>
+                    <th>Submit / pay</th>
+                    <th>Status</th>
+                    <th>Actual deposit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {periods
+                    .slice()
+                    .sort((a, b) =>
+                      history
+                        ? b.start.localeCompare(a.start)
+                        : a.start.localeCompare(b.start),
+                    )
+                    .map((p) => {
+                      const t = totals(periodSessions(p), settings);
+                      const payment = payments.find((v) => v.periodId === p.id);
+                      return (
+                        <tr key={p.id}>
+                          <td>
+                            <button
+                              className="cell-button"
+                              onClick={() => setPayEdit(p)}
+                            >
+                              {fmtDate(p.start)} – {fmtDate(p.end)}
+                              <small>
+                                Weeks ending {p.weeks.map(fmtDate).join(" & ")}
+                              </small>
+                            </button>
+                          </td>
+                          <td>{hours(t.mins)}</td>
+                          <td>
+                            {money(t.gross)}
+                            <small>{money(t.deductions)} est. deductions</small>
+                          </td>
+                          <td>{money(t.net)}</td>
+                          <td>
+                            {fmtDate(p.submit)}
+                            <small>Pay {fmtDate(p.pay)}</small>
+                          </td>
+                          <td>
+                            <span className={"badge " + paymentStatus(p)}>
+                              {paymentStatus(p)}
+                            </span>
+                          </td>
+                          <td>
+                            {payment?.deposit !== null &&
+                            payment?.deposit !== undefined ? (
+                              <>
+                                {money(payment.deposit)}
+                                <small>
+                                  {fmtDate(payment.depositDate)} · Δ{" "}
+                                  {money(payment.deposit - t.net)}
+                                </small>
+                              </>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </section>
+            <div className="section-line spaced">
+              <h2>Unassigned work</h2>
+              <span>Outside the configured payroll dates</span>
+            </div>
+            <section className="panel">
+              {list(
+                sessions.filter(
+                  (s) => s.status === "completed" && !periodFor(s, periods),
+                ),
+                "No unassigned completed sessions",
+              )}
+            </section>
+          </>
+        )}
+        {page === "Settings" && (
+          <SettingsPage settings={settings} act={act} notify={setNotice} />
+        )}
+      </main>
+      {studentEdit && (
+        <StudentForm
+          student={studentEdit}
+          close={() => setStudentEdit(null)}
+          after={(s) => {
+            if (profile?.id === s.id) setProfile(s);
+          }}
+        />
+      )}
+      {sessionEdit && (
+        <SessionForm
+          session={sessionEdit}
+          close={() => setSessionEdit(null)}
+          students={students}
+          courses={courses}
+          settings={settings}
+          syncRecord={
+            typeof sessionEdit === "object"
+              ? records.find((r) => r.sessionId === sessionEdit.id)
+              : undefined
+          }
+        />
+      )}
+      {payEdit && (
+        <PaymentForm
+          period={payEdit}
+          payment={payments.find((p) => p.periodId === payEdit.id)}
+          settings={settings}
+          sessions={periodSessions(payEdit)}
+          close={() => setPayEdit(null)}
+          sessionList={list}
+        />
+      )}
+    </div>
+  );
+}
+function StudentForm({
+  student,
+  close,
+  after,
+}: {
+  student: Student | "new";
+  close: () => void;
+  after: (s: Student) => void;
+}) {
+  const courses = useLiveQuery(() => db.courses.toArray()) || [];
+  const original = student === "new" ? null : student;
+  const [name, setName] = useState(original?.name || "");
+  const [course, setCourse] = useState("");
+  const [note, setNote] = useState(original?.note || "");
+  const [archived, setArchived] = useState(original?.archived || false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (original)
+      db.courses.get(original.courseId).then((c) => setCourse(c?.name || ""));
+  }, []);
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    try {
+      await db.transaction("rw", db.students, db.courses, async () => {
+        const s = studentSchema.parse({
+          id: original?.id || uid(),
+          name,
+          courseId: await courseId(course),
+          note,
+          archived,
+          createdAt: original?.createdAt || now(),
+        });
+        await db.students.put(s);
+        after(s);
+      });
+      close();
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+  async function remove() {
+    try {
+      const count = await db.sessions
+        .where("studentId")
+        .equals(original!.id)
+        .count();
+      if (count) {
+        if (
+          confirm(
+            "This student has session history. Archive the student and preserve all history?",
+          )
+        ) {
+          const s = { ...original!, archived: true };
+          await db.students.put(s);
+          after(s);
+          close();
+        }
+      } else if (confirm("Delete this student? This cannot be undone.")) {
+        await db.students.delete(original!.id);
+        close();
+      }
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+  return (
+    <Modal title={original ? "Edit student" : "Add student"} close={close}>
+      <form onSubmit={save}>
+        {error && (
+          <p role="alert" className="form-error">
+            {error}
+          </p>
+        )}
+        <Field label="Student name">
+          <input
+            required
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </Field>
+        <Field label="Course">
+          <input
+            required
+            list="student-courses"
+            value={course}
+            onChange={(e) => setCourse(e.target.value)}
+          />
+          <datalist id="student-courses">
+            {courses.map((c) => (
+              <option key={c.id}>{courseLabel(c)}</option>
+            ))}
+          </datalist>
+        </Field>
+        <Field label="Short note">
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={2}
+          />
+        </Field>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={archived}
+            onChange={(e) => setArchived(e.target.checked)}
+          />
+          Archived
+        </label>
+        {original && (
+          <p className="hint">Created {fmtDate(original.createdAt)}</p>
+        )}
+        <footer>
+          {original && (
+            <button
+              className="danger icon"
+              type="button"
+              aria-label="Delete student"
+              title="Delete student"
+              onClick={remove}
+            >
+              <Trash2 size={18} />
+            </button>
+          )}
+          <button type="button" onClick={close}>
+            Cancel
+          </button>
+          <button className="primary">Save student</button>
+        </footer>
+      </form>
+    </Modal>
+  );
+}
+function SessionForm({
+  session,
+  close,
+  students,
+  courses,
+  settings,
+}: {
+  session: Session | "new";
+  close: () => void;
+  students: Student[];
+  courses: Course[];
+  settings: Settings;
+  syncRecord?: { eventId: string; syncedAt: string };
+}) {
+  const original = session === "new" ? undefined : session;
+  const start = new Date();
+  start.setMinutes(0, 0, 0);
+  start.setHours(start.getHours() + 1);
+  const [s, setS] = useState<Session>(
+    () =>
+      original || {
+        id: uid(),
+        studentId: "",
+        courseId: "",
+        title: "Tutoring",
+        scheduledStart: start.toISOString(),
+        scheduledEnd: new Date(+start + 3600000).toISOString(),
+        actualStart: "",
+        actualEnd: "",
+        topics: "",
+        notes: "",
+        status: "scheduled",
+        eventCancelled: false,
+        updatedAt: now(),
+        scheduleUpdatedAt: now(),
+        deleted: false,
+      },
+  );
+  const [adjustHours, setAdjustHours] = useState(
+    !!original &&
+      !!(original.actualStart || original.actualEnd) &&
+      (original.actualStart !== original.scheduledStart ||
+        original.actualEnd !== original.scheduledEnd),
+  );
+  const [addingStudent, setAddingStudent] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newCourse, setNewCourse] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const set = (k: keyof Session, v: unknown) =>
+    setS((prev) => ({ ...prev, [k]: v }));
+  const counted = sessionWithHours(s, adjustHours);
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      await saveSessionEntry(
+        s,
+        adjustHours,
+        addingStudent ? { name: newName, courseId: newCourse } : undefined,
+        original,
+      );
+      close();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <Modal title={original ? "Session details" : "Add session"} close={close}>
+      <form onSubmit={save}>
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="section-line">
+          <h3>Student</h3>
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => setAddingStudent(!addingStudent)}
+          >
+            {addingStudent ? "Use existing student" : "+ Add new student"}
+          </button>
+        </div>
+        {addingStudent ? (
+          <>
+            <Field label="New student name">
+              <input
+                autoFocus
+                required
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
+            </Field>
+            <CoursePicker
+              courses={courses}
+              value={newCourse}
+              onChange={setNewCourse}
+            />
+            <p className="hint">
+              The student and session will be saved together.
+            </p>
+          </>
+        ) : (
+          <>
+            <Field label="Student">
+              <select
+                required
+                value={s.studentId}
+                onChange={(e) => {
+                  const student = students.find((x) => x.id === e.target.value);
+                  setS({
+                    ...s,
+                    studentId: e.target.value,
+                    courseId: student?.courseId || "",
+                  });
+                }}
+              >
+                <option value="">Choose student</option>
+                {students
+                  .filter((x) => !x.archived || x.id === s.studentId)
+                  .map((x) => (
+                    <option value={x.id} key={x.id}>
+                      {x.name}
+                      {x.archived ? " (archived)" : ""}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+            <CoursePicker
+              courses={courses}
+              value={s.courseId}
+              onChange={(id) => set("courseId", id)}
+            />
+          </>
+        )}
+        <SessionSchedule
+          start={s.scheduledStart}
+          end={s.scheduledEnd}
+          onChange={(scheduledStart, scheduledEnd) =>
+            setS((prev) => ({ ...prev, scheduledStart, scheduledEnd }))
+          }
+        />
+        <Field label="Status">
+          <select
+            value={s.status}
+            onChange={(e) => set("status", e.target.value)}
+          >
+            <option value="scheduled">Scheduled</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </Field>
+        {s.status === "completed" ? (
+          <>
+            <div className="section-line">
+              <p className="hint">
+                {hours(
+                  Math.max(0, duration(counted.actualStart, counted.actualEnd)),
+                )}{" "}
+                h · {money(totals([counted], settings).gross)} gross
+              </p>
+              <button
+                type="button"
+                className="text-button"
+                aria-expanded={adjustHours}
+                onClick={() => {
+                  if (!adjustHours)
+                    setS((prev) => ({
+                      ...prev,
+                      actualStart: prev.scheduledStart,
+                      actualEnd: prev.scheduledEnd,
+                    }));
+                  setAdjustHours(!adjustHours);
+                }}
+              >
+                {adjustHours ? "Use session times" : "Adjust hours"}
+              </button>
+            </div>
+            {adjustHours ? (
+              <SessionSchedule
+                label="Actual"
+                start={s.actualStart || s.scheduledStart}
+                end={s.actualEnd || s.scheduledEnd}
+                onChange={(actualStart, actualEnd) =>
+                  setS((prev) => ({ ...prev, actualStart, actualEnd }))
+                }
+              />
+            ) : (
+              <p className="hint">
+                Completed hours use the start and end times above.
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="hint">
+            {hours(Math.max(0, duration(s.scheduledStart, s.scheduledEnd)))} h
+            scheduled · Only completed sessions count toward pay.
+          </p>
+        )}
+        <details className="session-details" open={undefined}>
+          <summary>Notes and session title</summary>
+          <Field label="Session title">
+            <input
+              required
+              value={s.title}
+              onChange={(e) => set("title", e.target.value)}
+            />
+          </Field>
+          <Field label="Topics covered">
+            <input
+              value={s.topics}
+              onChange={(e) => set("topics", e.target.value)}
+            />
+          </Field>
+          <Field label="Session notes">
+            <textarea
+              rows={3}
+              value={s.notes}
+              onChange={(e) => set("notes", e.target.value)}
+            />
+          </Field>
+        </details>
+        <footer>
+          {original && (
+            <button
+              type="button"
+              className="icon danger"
+              aria-label="Delete session"
+              title="Delete session"
+              disabled={saving}
+              onClick={async () => {
+                if (confirm("Delete this session and its recorded hours?")) {
+                  try {
+                    await deleteSession(original);
+                    close();
+                  } catch (e) {
+                    setError(String(e));
+                  }
+                }
+              }}
+            >
+              <Trash2 size={18} />
+            </button>
+          )}
+          <button type="button" onClick={close}>
+            Cancel
+          </button>
+          <button className="primary" disabled={saving}>
+            {saving ? "Saving…" : "Save session"}
+          </button>
+        </footer>
+      </form>
+    </Modal>
+  );
+}
+
+function PaymentForm({
+  period,
+  payment,
+  settings,
+  sessions,
+  close,
+  sessionList,
+}: {
+  period: Period;
+  payment?: Payment;
+  settings: Settings;
+  sessions: Session[];
+  close: () => void;
+  sessionList: (ss: Session[]) => ReactNode;
+}) {
+  const [status, setStatus] = useState(payment?.status || "upcoming");
+  const [deposit, setDeposit] = useState(payment?.deposit?.toString() || "");
+  const [date, setDate] = useState(payment?.depositDate || "");
+  const [note, setNote] = useState(payment?.note || "");
+  const [error, setError] = useState("");
+  const t = totals(sessions, settings);
+  return (
+    <Modal
+      title={fmtDate(period.start) + " – " + fmtDate(period.end)}
+      close={close}
+    >
+      <p className="hint">
+        Weeks ending {period.weeks.map(fmtDate).join(" & ")} · Submit{" "}
+        {fmtDate(period.submit)} · Pay {fmtDate(period.pay)}
+      </p>
+      <div className="payment-summary">
+        <span>{hours(t.mins)} h actual</span>
+        <span>{money(t.gross)} gross</span>
+        <span>{money(t.deductions)} est. deductions</span>
+        <strong>{money(t.net)} est. take-home</strong>
+      </div>
+      {period.weeks.map((end) => {
+        const range = weekRange(new Date(end + "T12:00:00"));
+        const w = totals(
+          sessions.filter((s) => inRange(s, range.start, range.end)),
+          settings,
+        );
+        return (
+          <p className="hint" key={end}>
+            Week ending {fmtDate(end)}: {hours(w.mins)} h · {money(w.gross)}{" "}
+            gross · {money(w.net)} est. take-home
+          </p>
+        );
+      })}
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          try {
+            const p = paymentSchema.parse({
+              id: payment?.id || uid(),
+              periodId: period.id,
+              status,
+              deposit: deposit === "" ? null : Number(deposit),
+              depositDate: date,
+              note,
+            });
+            if (
+              (p.deposit !== null && !p.depositDate) ||
+              (p.deposit === null && p.depositDate)
+            )
+              throw Error("Enter both deposit amount and date.");
+            await db.payments.put(p);
+            close();
+          } catch (e) {
+            setError(String(e));
+          }
+        }}
+      >
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        <Field label="Payment status">
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as Payment["status"])}
+          >
+            {["upcoming", "submitted", "paid", "overdue"].map((v) => (
+              <option key={v}>{v}</option>
+            ))}
+          </select>
+        </Field>
+        <div className="form-grid">
+          <Field label="Actual deposit (CAD)">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={deposit}
+              onChange={(e) => setDeposit(e.target.value)}
+            />
+          </Field>
+          <Field label="Deposit date">
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </Field>
+        </div>
+        <p className="hint">
+          Difference from estimate:{" "}
+          {deposit !== "" ? money(Number(deposit) - t.net) : "—"}
+        </p>
+        <Field label="Payment note">
+          <textarea
+            rows={2}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </Field>
+        <footer>
+          <button type="button" onClick={close}>
+            Cancel
+          </button>
+          <button className="primary">Save payment</button>
+        </footer>
+      </form>
+      <h3>Included sessions</h3>
+      {sessionList(sessions)}
+    </Modal>
+  );
+}
+function SettingsPage({
+  settings,
+  act,
+  notify,
+}: {
+  settings: Settings;
+  act: (fn: () => Promise<unknown>) => Promise<void>;
+  notify: (s: string) => void;
+}) {
+  const [wage, setWage] = useState(settings.wage.toString());
+  const [deduction, setDeduction] = useState(settings.deduction.toString());
+  const input = useRef<HTMLInputElement>(null);
+  const [clear, setClear] = useState(false);
+  const [phrase, setPhrase] = useState("");
+  useEffect(() => {
+    setWage(String(settings.wage));
+    setDeduction(String(settings.deduction));
+  }, [settings.wage, settings.deduction]);
+  return (
+    <div className="settings-grid">
+      <section className="panel">
+        <h2>Earnings</h2>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void act(async () => {
+              const value = settingsSchema.parse({
+                ...settings,
+                wage: Number(wage),
+                deduction: Number(deduction),
+                deductionBasis:
+                  deduction === String(settings.deduction)
+                    ? settings.deductionBasis
+                    : "manual",
+              });
+              await db.settings.put(value);
+              notify("Earnings settings saved");
+            });
+          }}
+        >
+          <div className="form-grid">
+            <Field label="Hourly wage (CAD)">
+              <input
+                required
+                type="number"
+                min="0"
+                max="10000"
+                step="0.01"
+                value={wage}
+                onChange={(e) => setWage(e.target.value)}
+              />
+            </Field>
+            <Field label="Estimated deductions (%)">
+              <input
+                required
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={deduction}
+                onChange={(e) => setDeduction(e.target.value)}
+              />
+            </Field>
+          </div>
+          <p className="hint">
+            {settings.deductionBasis === "provisional"
+              ? "Set your own deduction estimate."
+              : "Your editable deduction estimate."}{" "}
+            Changes recalculate estimates; recorded deposits stay unchanged.
+          </p>
+          <button className="primary">Save</button>
+        </form>
+      </section>
+      <section className="panel">
+        <h2>Local desktop app</h2>
+        <p className="hint">
+          Your records stay in this Windows account on this computer. No online
+          account, hosting, or Google Calendar connection is used.
+        </p>
+        <p className="hint">
+          The Calendar page keeps your schedule locally and works without
+          internet.
+        </p>
+      </section>
+      <section className="panel">
+        <h2>Backup</h2>
+        <p className="hint">
+          Export regularly to a private local folder or removable drive. Import
+          replaces your current records.
+        </p>
+        <div className="inline">
+          <button
+            onClick={() =>
+              act(async () => {
+                const b = await exportData();
+                const saved = await window.tutortrack.saveBackup(
+                  JSON.stringify(b, null, 2),
+                  "TutorTrack-" + localDate(new Date()) + ".json",
+                );
+                if (!saved) return;
+                await db.settings.update("settings", { lastBackup: now() });
+                notify("Backup saved");
+              })
+            }
+          >
+            <Download size={16} />
+            Export JSON
+          </button>
+          <button onClick={() => input.current?.click()}>
+            <Upload size={16} />
+            Import JSON
+          </button>
+        </div>
+        <input
+          hidden
+          ref={input}
+          type="file"
+          accept=".json,application/json"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file)
+              void act(async () => {
+                if (file.size > 50 * 1024 * 1024)
+                  throw Error("Backup exceeds 50 MB.");
+                const b = validateBackup(JSON.parse(await file.text()));
+                if (
+                  confirm(
+                    `Replace all local data with this backup? It contains ${b.students.length} students and ${b.sessions.length} sessions. Existing records will be replaced.`,
+                  )
+                ) {
+                  await importData(b);
+                  notify("Backup restored.");
+                }
+              });
+          }}
+        />
+        <p className="hint">
+          Last backup:{" "}
+          {settings.lastBackup
+            ? new Date(settings.lastBackup).toLocaleString()
+            : "Not yet backed up"}
+        </p>
+      </section>
+      <section className="panel">
+        <h2>This device</h2>
+        <p className="hint">
+          Open TutorTrack from its desktop shortcut. It works offline from the
+          first launch.
+        </p>
+        <p className="hint">
+          Records are saved automatically in your Windows account’s
+          TutorTrackPublic data folder. Use the File menu to locate it. Export a
+          backup before moving to another computer.
+        </p>
+        <button className="danger" onClick={() => setClear(true)}>
+          <Trash2 size={16} />
+          Clear all local data
+        </button>
+      </section>
+      {clear && (
+        <Modal title="Clear all local data?" close={() => setClear(false)}>
+          <p>
+            All students, sessions, payments, and settings on this device will
+            be removed. This cannot be undone without a backup.
+          </p>
+          <Field label="Type CLEAR to confirm">
+            <input
+              autoFocus
+              value={phrase}
+              onChange={(e) => setPhrase(e.target.value)}
+            />
+          </Field>
+          <footer>
+            <button onClick={() => setClear(false)}>Cancel</button>
+            <button
+              className="danger"
+              disabled={phrase !== "CLEAR"}
+              onClick={() =>
+                act(async () => {
+                  await db.transaction("rw", db.tables, async () => {
+                    for (const table of db.tables) await table.clear();
+                  });
+                  await initialize();
+                  setClear(false);
+                  notify("Local data cleared");
+                })
+              }
+            >
+              Clear data
+            </button>
+          </footer>
+        </Modal>
+      )}
+    </div>
+  );
+}
