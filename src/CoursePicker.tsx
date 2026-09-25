@@ -14,6 +14,7 @@ export function CoursePicker({
   const [search, setSearch] = useState("");
   const selected = courses.find((c) => c.id === value);
   const options = courses
+    .filter((c) => !c.archived)
     .filter((c) => courseLabel(c).toLowerCase().includes(search.toLowerCase()))
     .sort(
       (a, b) =>

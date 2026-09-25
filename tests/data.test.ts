@@ -1,4 +1,5 @@
 import "fake-indexeddb/auto";
+import { setPaymentStatus, removeCourse, shiftSessionStart } from "../src/data";
 import { beforeEach, expect, it } from "vitest";
 import {
   db,
@@ -141,4 +142,47 @@ it("shows only the work covered by the next unpaid paycheck", () => {
   expect(result?.period.id).toBe(seedPeriods[0].id);
   expect(result?.gross).toBe(37.5);
   expect(result?.net).toBe(33.75);
+});
+
+it("preserves duration when moving the start time across midnight", () => {
+  expect(
+    shiftSessionStart(
+      "2026-01-06T14:00:00Z",
+      "2026-01-06T15:00:00Z",
+      "2026-01-07T23:30:00Z",
+    ).end,
+  ).toBe("2026-01-08T00:30:00.000Z");
+});
+
+it("archives courses without deleting session history", async () => {
+  await db.courses.add({ id: "sample-math", name: "Example course" });
+  const session = await saveSessionEntry(sample({ studentId: "" }), false, {
+    name: "Example Learner",
+    courseId: "sample-math",
+  });
+  await removeCourse("sample-math");
+  await initialize();
+  await importData(await exportData());
+  expect((await db.courses.get("sample-math"))?.archived).toBe(true);
+  expect((await db.sessions.get(session.id))?.courseId).toBe("sample-math");
+});
+
+it("marks a period paid without inventing a deposit", async () => {
+  await db.periods.add(seedPeriods[0]);
+  const payment = await setPaymentStatus(seedPeriods[0].id, "paid");
+  expect(payment.deposit).toBeNull();
+  expect(
+    nextPaycheck([], seedPeriods, [payment], settings, "2026-01-20"),
+  ).toBeUndefined();
+  await setPaymentStatus(seedPeriods[0].id, "upcoming");
+  expect(await db.payments.count()).toBe(1);
+});
+
+it("keeps hourly-rate precision until the gross total is rounded", () => {
+  expect(totals([sample()], { ...settings, wage: 25.4321 })).toEqual({
+    mins: 90,
+    gross: 38.15,
+    deductions: 3.82,
+    net: 34.33,
+  });
 });

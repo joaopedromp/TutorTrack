@@ -16,6 +16,7 @@ export const courseSchema = z.object({
   id,
   name: z.string().trim().min(1),
   code: z.string().optional(),
+  archived: z.boolean().optional(),
 });
 export const courseLabel = (course?: { name: string; code?: string }) =>
   course
@@ -84,19 +85,14 @@ export const periodSchema = z.object({
   submit: date,
   pay: date,
 });
-export const paymentSchema = z
-  .object({
-    id,
-    periodId: id,
-    status: z.enum(["upcoming", "submitted", "paid", "overdue"]),
-    deposit: z.number().min(0).nullable(),
-    depositDate: z.union([date, z.literal("")]),
-    note: z.string(),
-  })
-  .refine(
-    (p) => p.status !== "paid" || (p.deposit !== null && !!p.depositDate),
-    "Paid requires actual deposit and date",
-  );
+export const paymentSchema = z.object({
+  id,
+  periodId: id,
+  status: z.enum(["upcoming", "submitted", "paid", "overdue"]),
+  deposit: z.number().min(0).nullable(),
+  depositDate: z.union([date, z.literal("")]),
+  note: z.string(),
+});
 export const settingsSchema = z.object({
   id: z.literal("settings"),
   wage: z.number().min(0).max(10000),
@@ -440,4 +436,45 @@ export async function saveSessionEntry(
       return checked;
     },
   );
+}
+
+export function shiftSessionStart(
+  start: string,
+  end: string,
+  nextStart: string,
+) {
+  const ms = Math.max(0, Date.parse(end) - Date.parse(start));
+  return {
+    start: nextStart,
+    end: new Date(Date.parse(nextStart) + ms).toISOString(),
+  };
+}
+export async function removeCourse(id: string) {
+  await db.courses.update(id, { archived: true });
+}
+
+export async function setPaymentStatus(
+  periodId: string,
+  status: Payment["status"],
+  note?: string,
+) {
+  return db.transaction("rw", db.payments, db.periods, async () => {
+    if (!(await db.periods.get(periodId)))
+      throw Error("Unknown payroll period");
+    const existing = await db.payments
+      .where("periodId")
+      .equals(periodId)
+      .first();
+    const payment = paymentSchema.parse({
+      ...existing,
+      id: existing?.id || uid(),
+      periodId,
+      status,
+      deposit: existing?.deposit ?? null,
+      depositDate: existing?.depositDate || "",
+      note: note ?? existing?.note ?? "",
+    });
+    await db.payments.put(payment);
+    return payment;
+  });
 }

@@ -1473,3 +1473,131 @@ dialog footer .danger {
     padding: 18px;
   }
 }
+
+.settings-clean {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  grid-template-areas: "earnings courses" "backup courses" "data data";
+  gap: 18px;
+}
+.settings-clean .settings-earnings {
+  grid-area: earnings;
+}
+.settings-clean .settings-courses {
+  grid-area: courses;
+}
+.settings-clean .settings-backup {
+  grid-area: backup;
+}
+.settings-clean .settings-data {
+  grid-area: data;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.settings-clean h2 {
+  margin-bottom: 14px;
+}
+.settings-clean .settings-data h2 {
+  margin: 0;
+}
+.settings-clean .hint {
+  margin: 10px 0 14px;
+}
+.settings-clean .settings-data p {
+  margin-bottom: 0;
+}
+.settings-clean .field {
+  margin: 8px 0 14px;
+}
+.settings-course-list {
+  max-height: 340px;
+  overflow: auto;
+  margin-top: 14px;
+  padding-right: 8px;
+}
+.settings-course-list .section-line {
+  padding: 10px 0;
+  margin: 0;
+  border-bottom: 1px solid #2c3037;
+}
+.settings-course-list .section-line:last-child {
+  border-bottom: 0;
+}
+.settings-course-list .section-line > span {
+  color: #b7bfcc;
+}
+.settings-course-list button {
+  padding: 6px 10px;
+  flex-shrink: 0;
+}
+.payment-status {
+  min-width: 125px;
+  text-transform: capitalize;
+}
+@media (max-width: 1000px) {
+  .settings-clean {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "earnings" "courses" "backup" "data";
+  }
+}
+@media (max-width: 600px) {
+  .settings-clean .settings-data {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+.payment-status.paid {
+  background: #243d30;
+  border-color: #3a6049;
+  color: #c5e5cd;
+}
+.payment-status.paid:hover {
+  background: #2b4839;
+}
+.payment-status option {
+  background: #22252a;
+  color: #eef1f5;
+}
+.pay-date {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+}
+.course-management-search {
+  width: 100%;
+  margin: 0 0 14px;
+}
+
+/* Keep dashboard dates on a shared column regardless of time-string length. */
+.dashboard-content .session-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 145px 16px;
+  align-items: center;
+}
+.dashboard-content .session-date {
+  width: 145px;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+.dashboard-content .session-date small {
+  max-width: none;
+}
+.app > aside > .brand + nav {
+  margin-top: 34px;
+}
+@media (max-width: 600px) {
+  .dashboard-content .session-row {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+  .dashboard-content .session-date {
+    display: block;
+    grid-column: 2;
+    width: auto;
+  }
+  .dashboard-content .session-date small {
+    white-space: normal;
+  }
+}

@@ -1,4 +1,4 @@
-import { localDate, duration, hours } from "./data";
+import { localDate, duration, fmtTime, shiftSessionStart } from "./data";
 
 function TimeSelect({
   label,
@@ -77,30 +77,10 @@ export function SessionSchedule({
   onChange: (start: string, end: string) => void;
   label?: string;
 }) {
-  const separateDate = localDate(start) !== localDate(end);
-  function setTime(which: "start" | "end", hour: number, minute: number) {
-    const d = new Date(which === "start" ? start : end);
-    d.setHours(hour, minute, 0, 0);
-    onChange(
-      which === "start" ? d.toISOString() : start,
-      which === "end" ? d.toISOString() : end,
-    );
-  }
-  function setDate(value: string, which: "start" | "end") {
-    if (!value) return;
-    const [year, month, day] = value.split("-").map(Number);
-    const d = new Date(which === "start" ? start : end);
-    d.setFullYear(year, month - 1, day);
-    let nextEnd = end;
-    if (which === "start" && !separateDate) {
-      const e = new Date(end);
-      e.setFullYear(year, month - 1, day);
-      nextEnd = e.toISOString();
-    }
-    onChange(
-      which === "start" ? d.toISOString() : start,
-      which === "end" ? d.toISOString() : nextEnd,
-    );
+  const length = duration(start, end) / 60;
+  function moveStart(d: Date) {
+    const next = shiftSessionStart(start, end, d.toISOString());
+    onChange(next.start, next.end);
   }
   return (
     <div className="session-schedule">
@@ -112,57 +92,50 @@ export function SessionSchedule({
             required
             type="date"
             value={localDate(start)}
-            onChange={(e) => setDate(e.target.value, "start")}
+            onChange={(e) => {
+              if (!e.target.value) return;
+              const [y, m, d] = e.target.value.split("-").map(Number);
+              const next = new Date(start);
+              next.setFullYear(y, m - 1, d);
+              moveStart(next);
+            }}
           />
         </label>
-        <span className="duration-chip">
-          {hours(Math.max(0, duration(start, end)))} hours
-        </span>
       </div>
       <div className="time-grid">
         <TimeSelect
           label={label + " start"}
           value={start}
-          onChange={(h, m) => setTime("start", h, m)}
-        />
-        <TimeSelect
-          label={label + " end"}
-          value={end}
-          onChange={(h, m) => setTime("end", h, m)}
-        />
-      </div>
-      <label className="checkbox overnight">
-        <input
-          type="checkbox"
-          checked={separateDate}
-          onChange={(e) => {
-            const d = new Date(end);
-            const s = new Date(start);
-            d.setFullYear(
-              s.getFullYear(),
-              s.getMonth(),
-              s.getDate() + (e.target.checked ? 1 : 0),
-            );
-            onChange(start, d.toISOString());
+          onChange={(h, m) => {
+            const next = new Date(start);
+            next.setHours(h, m, 0, 0);
+            moveStart(next);
           }}
         />
-        Ends on another day
-      </label>
-      {separateDate && (
-        <label className="end-date">
-          End date
+        <label>
+          Duration (hours)
           <input
-            aria-label={label + " end date"}
-            type="date"
+            aria-label={label + " duration in hours"}
             required
-            value={localDate(end)}
-            onChange={(e) => setDate(e.target.value, "end")}
+            type="number"
+            min="0.25"
+            step="any"
+            value={length || ""}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              if (Number.isFinite(value) && value >= 0)
+                onChange(
+                  start,
+                  new Date(Date.parse(start) + value * 3600000).toISOString(),
+                );
+            }}
           />
         </label>
-      )}
-      {duration(start, end) <= 0 && (
-        <p className="form-error">End time must be later than start time.</p>
-      )}
+      </div>
+      <p className="hint">
+        Ends at {fmtTime(end)}
+        {localDate(start) !== localDate(end) ? " · " + localDate(end) : ""}
+      </p>
     </div>
   );
 }

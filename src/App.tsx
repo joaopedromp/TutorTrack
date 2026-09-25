@@ -36,6 +36,8 @@ import {
   BookOpen,
 } from "lucide-react";
 import {
+  setPaymentStatus,
+  removeCourse,
   courseLabel,
   type Course,
   nextPaycheck,
@@ -56,10 +58,8 @@ import {
   fmtDate,
   fmtTime,
   duration,
-  courseId,
   studentSchema,
   sessionSchema,
-  paymentSchema,
   settingsSchema,
   deleteSession,
   exportData,
@@ -177,13 +177,10 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [course, setCourse] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
   const [order, setOrder] = useState("newest");
   const [showArchived, setShowArchived] = useState(false);
   const [calendarView, setCalendarView] = useState<"month" | "week">("month");
   const [anchor, setAnchor] = useState(new Date());
-  const [history, setHistory] = useState(false);
   const data = useLiveQuery(async () => ({
     students: await db.students.toArray(),
     courses: await db.courses.toArray(),
@@ -224,12 +221,7 @@ export default function App() {
   const courseName = (id: string) =>
     courseLabel(courses.find((x) => x.id === id));
   const today = localDate(new Date());
-  const week = weekRange();
   const current = periods.find((p) => p.start <= today && p.end >= today);
-  const weekly = totals(
-    sessions.filter((s) => inRange(s, week.start, week.end)),
-    settings,
-  );
   const periodSessions = (p: Period) =>
     sessions.filter((s) => periodFor(s, periods)?.id === p.id);
   const periodTotal = totals(current ? periodSessions(current) : [], settings);
@@ -239,7 +231,6 @@ export default function App() {
         s.status === "scheduled" && !s.eventCancelled && s.scheduledEnd > now(),
     )
     .sort((a, b) => a.scheduledStart.localeCompare(b.scheduledStart));
-  const soon = upcoming.filter((s) => localDate(s.scheduledStart) <= week.end);
   const upcomingDays = [
     ...new Set(upcoming.map((s) => localDate(s.scheduledStart))),
   ];
@@ -256,11 +247,7 @@ export default function App() {
   const paycheck = nextPaycheck(sessions, periods, payments, settings, today);
   const paymentStatus = (p: Period) => {
     const saved = payments.find((x) => x.periodId === p.id);
-    return saved?.status === "paid"
-      ? "paid"
-      : p.pay < today
-        ? "overdue"
-        : saved?.status || "upcoming";
+    return saved?.status === "paid" ? "paid" : "upcoming";
   };
   const openPage = (p: Page) => {
     setPage(p);
@@ -298,26 +285,30 @@ export default function App() {
                 {fmtTime(s.scheduledStart)}–{fmtTime(s.scheduledEnd)}
               </small>
             </span>
-            <span className="session-pay">
-              {s.status === "completed" ? (
-                money(totals([s], settings).gross)
-              ) : (
-                <span className={"badge " + s.status}>{s.status}</span>
-              )}
-              <small>
-                {s.status === "completed"
-                  ? hours(duration(s.actualStart, s.actualEnd)) + " h actual"
-                  : hours(duration(s.scheduledStart, s.scheduledEnd)) +
-                    " h scheduled"}
-              </small>
-            </span>
+            {page !== "Dashboard" && (
+              <span className="session-pay">
+                {s.status === "completed" ? (
+                  page === "Sessions" ? null : (
+                    money(totals([s], settings).gross)
+                  )
+                ) : (
+                  <span className={"badge " + s.status}>{s.status}</span>
+                )}
+                <small>
+                  {s.status === "completed"
+                    ? hours(duration(s.actualStart, s.actualEnd)) + " h actual"
+                    : hours(duration(s.scheduledStart, s.scheduledEnd)) +
+                      " h scheduled"}
+                </small>
+              </span>
+            )}
             <ChevronRight size={16} />
           </button>
         ))
       ) : (
         <Empty
           text={empty}
-          action="Add session"
+          action={page === "Students" && profile ? undefined : "Add session"}
           click={() => setSessionEdit("new")}
         />
       )}
@@ -358,7 +349,6 @@ export default function App() {
           </span>
           TutorTrack
         </a>
-        <div className="sidebar-caption">WORKSPACE</div>
         <nav>
           {nav.map(([p, Icon]) => (
             <button
@@ -373,10 +363,6 @@ export default function App() {
             </button>
           ))}
         </nav>
-        <div className="sidebar-bottom">
-          <span className="local-mark" />
-          Stored on this device<small>Entirely local</small>
-        </div>
       </aside>
       <main>
         <header className="page-header">
@@ -453,12 +439,7 @@ export default function App() {
                   <div className="paycheck-amount">
                     <strong>{money(paycheck.net)}</strong>
                     <span>Estimated take-home</span>
-                    <small>
-                      {money(paycheck.gross)} gross · {settings.deduction}%{" "}
-                      {settings.deductionBasis === "provisional"
-                        ? "provisional deduction"
-                        : "deductions"}
-                    </small>
+                    <small>{money(paycheck.gross)} gross</small>
                   </div>
                   <button
                     className="secondary"
@@ -471,25 +452,27 @@ export default function App() {
               )}
             </section>
             <div className="section-line">
-              <h2>This week</h2>
+              <h2>Current pay period</h2>
               <span>
-                {fmtDate(week.start)} – {fmtDate(week.end)}
+                {current
+                  ? fmtDate(current.start) + " – " + fmtDate(current.end)
+                  : "No current pay period"}
               </span>
             </div>
             <div className="metrics">
               {metric(
                 "Hours worked",
-                hours(weekly.mins),
+                hours(periodTotal.mins),
                 "Completed actual time",
               )}
               {metric(
                 "Gross earnings",
-                money(weekly.gross),
+                money(periodTotal.gross),
                 money(settings.wage) + " / hour",
               )}
               {metric(
                 "Est. take-home",
-                money(weekly.net),
+                money(periodTotal.net),
                 settings.deduction + "% estimated deductions",
               )}
             </div>
@@ -528,9 +511,8 @@ export default function App() {
                   </button>
                 </div>
                 <p className="upcoming-summary">
-                  {soon.length} remaining this week ·{" "}
                   {hours(
-                    soon.reduce(
+                    upcoming.reduce(
                       (sum, s) =>
                         sum + duration(s.scheduledStart, s.scheduledEnd),
                       0,
@@ -626,18 +608,6 @@ export default function App() {
                 <option>completed</option>
                 <option>cancelled</option>
               </select>
-              <input
-                aria-label="From date"
-                type="date"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-              />
-              <input
-                aria-label="To date"
-                type="date"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-              />
               <select
                 aria-label="Sort order"
                 value={order}
@@ -662,9 +632,7 @@ export default function App() {
                         .toLowerCase()
                         .includes(search.toLowerCase()) &&
                       (!course || s.courseId === course) &&
-                      (!status || s.status === status) &&
-                      (!from || localDate(s.scheduledStart) >= from) &&
-                      (!to || localDate(s.scheduledStart) <= to),
+                      (!status || s.status === status),
                   )
                   .sort(
                     (a, b) =>
@@ -674,9 +642,6 @@ export default function App() {
                 "No matching sessions",
               )}
             </section>
-            <p className="hint">
-              Date filters use scheduled dates. Pay uses completed actual time.
-            </p>
           </>
         )}
         {page === "Students" && (
@@ -919,9 +884,6 @@ export default function App() {
                   ? `Current payroll: ${fmtDate(current.start)} – ${fmtDate(current.end)} · Pay ${fmtDate(current.pay)}`
                   : "No active payroll period"}
               </span>
-              <span>
-                Scheduled · <b>Completed</b> · <s>Cancelled</s>
-              </span>
             </div>
             <div className={"calendar " + calendarView}>
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
@@ -987,20 +949,7 @@ export default function App() {
         {page === "Payroll" && (
           <>
             <div className="section-line">
-              <div className="segmented">
-                <button
-                  className={!history ? "active" : ""}
-                  onClick={() => setHistory(false)}
-                >
-                  Payroll periods
-                </button>
-                <button
-                  className={history ? "active" : ""}
-                  onClick={() => setHistory(true)}
-                >
-                  Payment history
-                </button>
-              </div>
+              <h2>Payroll periods</h2>
               <span className="muted">CAD</span>
             </div>
             <section className="panel table-panel">
@@ -1011,22 +960,16 @@ export default function App() {
                     <th>Hours</th>
                     <th>Gross</th>
                     <th>Est. take-home</th>
-                    <th>Submit / pay</th>
+                    <th>Pay date</th>
                     <th>Status</th>
-                    <th>Actual deposit</th>
                   </tr>
                 </thead>
                 <tbody>
                   {periods
                     .slice()
-                    .sort((a, b) =>
-                      history
-                        ? b.start.localeCompare(a.start)
-                        : a.start.localeCompare(b.start),
-                    )
+                    .sort((a, b) => a.start.localeCompare(b.start))
                     .map((p) => {
                       const t = totals(periodSessions(p), settings);
-                      const payment = payments.find((v) => v.periodId === p.id);
                       return (
                         <tr key={p.id}>
                           <td>
@@ -1035,9 +978,6 @@ export default function App() {
                               onClick={() => setPayEdit(p)}
                             >
                               {fmtDate(p.start)} – {fmtDate(p.end)}
-                              <small>
-                                Weeks ending {p.weeks.map(fmtDate).join(" & ")}
-                              </small>
                             </button>
                           </td>
                           <td>{hours(t.mins)}</td>
@@ -1047,45 +987,42 @@ export default function App() {
                           </td>
                           <td>{money(t.net)}</td>
                           <td>
-                            {fmtDate(p.submit)}
-                            <small>Pay {fmtDate(p.pay)}</small>
+                            <strong className="pay-date">
+                              Pay {fmtDate(p.pay)}
+                            </strong>
+                            <small>Submit {fmtDate(p.submit)}</small>
                           </td>
                           <td>
-                            <span className={"badge " + paymentStatus(p)}>
-                              {paymentStatus(p)}
-                            </span>
-                          </td>
-                          <td>
-                            {payment?.deposit !== null &&
-                            payment?.deposit !== undefined ? (
-                              <>
-                                {money(payment.deposit)}
-                                <small>
-                                  {fmtDate(payment.depositDate)} · Δ{" "}
-                                  {money(payment.deposit - t.net)}
-                                </small>
-                              </>
-                            ) : (
-                              "—"
-                            )}
+                            <select
+                              className={"payment-status " + paymentStatus(p)}
+                              aria-label={
+                                "Payment status for " +
+                                fmtDate(p.start) +
+                                " – " +
+                                fmtDate(p.end)
+                              }
+                              value={paymentStatus(p)}
+                              onChange={(e) =>
+                                void act(() =>
+                                  setPaymentStatus(
+                                    p.id,
+                                    e.target.value as Payment["status"],
+                                  ),
+                                )
+                              }
+                            >
+                              {["upcoming", "paid"].map((v) => (
+                                <option key={v} value={v}>
+                                  {v[0].toUpperCase() + v.slice(1)}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                         </tr>
                       );
                     })}
                 </tbody>
               </table>
-            </section>
-            <div className="section-line spaced">
-              <h2>Unassigned work</h2>
-              <span>Outside the configured payroll dates</span>
-            </div>
-            <section className="panel">
-              {list(
-                sessions.filter(
-                  (s) => s.status === "completed" && !periodFor(s, periods),
-                ),
-                "No unassigned completed sessions",
-              )}
             </section>
           </>
         )}
@@ -1098,7 +1035,7 @@ export default function App() {
           student={studentEdit}
           close={() => setStudentEdit(null)}
           after={(s) => {
-            if (profile?.id === s.id) setProfile(s);
+            if (profile?.id === s.id) setProfile(s.archived ? null : s);
           }}
         />
       )}
@@ -1141,14 +1078,10 @@ function StudentForm({
   const courses = useLiveQuery(() => db.courses.toArray()) || [];
   const original = student === "new" ? null : student;
   const [name, setName] = useState(original?.name || "");
-  const [course, setCourse] = useState("");
+  const [course, setCourse] = useState(original?.courseId || "");
   const [note, setNote] = useState(original?.note || "");
   const [archived, setArchived] = useState(original?.archived || false);
   const [error, setError] = useState("");
-  useEffect(() => {
-    if (original)
-      db.courses.get(original.courseId).then((c) => setCourse(c?.name || ""));
-  }, []);
   async function save(e: FormEvent) {
     e.preventDefault();
     try {
@@ -1156,7 +1089,7 @@ function StudentForm({
         const s = studentSchema.parse({
           id: original?.id || uid(),
           name,
-          courseId: await courseId(course),
+          courseId: course,
           note,
           archived,
           createdAt: original?.createdAt || now(),
@@ -1188,6 +1121,7 @@ function StudentForm({
         }
       } else if (confirm("Delete this student? This cannot be undone.")) {
         await db.students.delete(original!.id);
+        after({ ...original!, archived: true });
         close();
       }
     } catch (e) {
@@ -1210,19 +1144,7 @@ function StudentForm({
             onChange={(e) => setName(e.target.value)}
           />
         </Field>
-        <Field label="Course">
-          <input
-            required
-            list="student-courses"
-            value={course}
-            onChange={(e) => setCourse(e.target.value)}
-          />
-          <datalist id="student-courses">
-            {courses.map((c) => (
-              <option key={c.id}>{courseLabel(c)}</option>
-            ))}
-          </datalist>
-        </Field>
+        <CoursePicker courses={courses} value={course} onChange={setCourse} />
         <Field label="Short note">
           <textarea
             value={note}
@@ -1243,14 +1165,9 @@ function StudentForm({
         )}
         <footer>
           {original && (
-            <button
-              className="danger icon"
-              type="button"
-              aria-label="Delete student"
-              title="Delete student"
-              onClick={remove}
-            >
+            <button className="danger" type="button" onClick={remove}>
               <Trash2 size={18} />
+              Remove student
             </button>
           )}
           <button type="button" onClick={close}>
@@ -1381,7 +1298,10 @@ function SessionForm({
                   setS({
                     ...s,
                     studentId: e.target.value,
-                    courseId: student?.courseId || "",
+                    courseId:
+                      courses.find(
+                        (c) => c.id === student?.courseId && !c.archived,
+                      )?.id || "",
                   });
                 }}
               >
@@ -1539,9 +1459,9 @@ function PaymentForm({
   close: () => void;
   sessionList: (ss: Session[]) => ReactNode;
 }) {
-  const [status, setStatus] = useState(payment?.status || "upcoming");
-  const [deposit, setDeposit] = useState(payment?.deposit?.toString() || "");
-  const [date, setDate] = useState(payment?.depositDate || "");
+  const [status, setStatus] = useState<Payment["status"]>(
+    payment?.status === "paid" ? "paid" : "upcoming",
+  );
   const [note, setNote] = useState(payment?.note || "");
   const [error, setError] = useState("");
   const t = totals(sessions, settings);
@@ -1550,47 +1470,21 @@ function PaymentForm({
       title={fmtDate(period.start) + " – " + fmtDate(period.end)}
       close={close}
     >
-      <p className="hint">
-        Weeks ending {period.weeks.map(fmtDate).join(" & ")} · Submit{" "}
-        {fmtDate(period.submit)} · Pay {fmtDate(period.pay)}
+      <p>
+        <strong className="pay-date">Pay {fmtDate(period.pay)}</strong>
+        <small>Submit {fmtDate(period.submit)}</small>
       </p>
       <div className="payment-summary">
-        <span>{hours(t.mins)} h actual</span>
+        <span>{hours(t.mins)} hours</span>
         <span>{money(t.gross)} gross</span>
         <span>{money(t.deductions)} est. deductions</span>
         <strong>{money(t.net)} est. take-home</strong>
       </div>
-      {period.weeks.map((end) => {
-        const range = weekRange(new Date(end + "T12:00:00"));
-        const w = totals(
-          sessions.filter((s) => inRange(s, range.start, range.end)),
-          settings,
-        );
-        return (
-          <p className="hint" key={end}>
-            Week ending {fmtDate(end)}: {hours(w.mins)} h · {money(w.gross)}{" "}
-            gross · {money(w.net)} est. take-home
-          </p>
-        );
-      })}
       <form
         onSubmit={async (e) => {
           e.preventDefault();
           try {
-            const p = paymentSchema.parse({
-              id: payment?.id || uid(),
-              periodId: period.id,
-              status,
-              deposit: deposit === "" ? null : Number(deposit),
-              depositDate: date,
-              note,
-            });
-            if (
-              (p.deposit !== null && !p.depositDate) ||
-              (p.deposit === null && p.depositDate)
-            )
-              throw Error("Enter both deposit amount and date.");
-            await db.payments.put(p);
+            await setPaymentStatus(period.id, status, note);
             close();
           } catch (e) {
             setError(String(e));
@@ -1604,36 +1498,17 @@ function PaymentForm({
         )}
         <Field label="Payment status">
           <select
+            className={"payment-status " + status}
             value={status}
             onChange={(e) => setStatus(e.target.value as Payment["status"])}
           >
-            {["upcoming", "submitted", "paid", "overdue"].map((v) => (
-              <option key={v}>{v}</option>
+            {["upcoming", "paid"].map((v) => (
+              <option value={v} key={v}>
+                {v[0].toUpperCase() + v.slice(1)}
+              </option>
             ))}
           </select>
         </Field>
-        <div className="form-grid">
-          <Field label="Actual deposit (CAD)">
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={deposit}
-              onChange={(e) => setDeposit(e.target.value)}
-            />
-          </Field>
-          <Field label="Deposit date">
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </Field>
-        </div>
-        <p className="hint">
-          Difference from estimate:{" "}
-          {deposit !== "" ? money(Number(deposit) - t.net) : "—"}
-        </p>
         <Field label="Payment note">
           <textarea
             rows={2}
@@ -1672,8 +1547,8 @@ function SettingsPage({
     setDeduction(String(settings.deduction));
   }, [settings.wage, settings.deduction]);
   return (
-    <div className="settings-grid">
-      <section className="panel">
+    <div className="settings-grid settings-clean">
+      <section className="panel settings-earnings">
         <h2>Earnings</h2>
         <form
           onSubmit={(e) => {
@@ -1700,12 +1575,12 @@ function SettingsPage({
                 type="number"
                 min="0"
                 max="10000"
-                step="0.01"
+                step="0.0001"
                 value={wage}
                 onChange={(e) => setWage(e.target.value)}
               />
             </Field>
-            <Field label="Estimated deductions (%)">
+            <Field label="Deductions (%)">
               <input
                 required
                 type="number"
@@ -1717,32 +1592,13 @@ function SettingsPage({
               />
             </Field>
           </div>
-          <p className="hint">
-            {settings.deductionBasis === "provisional"
-              ? "Set your own deduction estimate."
-              : "Your editable deduction estimate."}{" "}
-            Changes recalculate estimates; recorded deposits stay unchanged.
-          </p>
           <button className="primary">Save</button>
         </form>
       </section>
-      <section className="panel">
-        <h2>Local desktop app</h2>
-        <p className="hint">
-          Your records stay in this Windows account on this computer. No online
-          account, hosting, or Google Calendar connection is used.
-        </p>
-        <p className="hint">
-          The Calendar page keeps your schedule locally and works without
-          internet.
-        </p>
-      </section>
-      <section className="panel">
+      <CourseManagement />
+      <section className="panel settings-backup">
         <h2>Backup</h2>
-        <p className="hint">
-          Export regularly to a private local folder or removable drive. Import
-          replaces your current records.
-        </p>
+        <p className="hint">Import replaces current records.</p>
         <div className="inline">
           <button
             onClick={() =>
@@ -1797,17 +1653,13 @@ function SettingsPage({
             : "Not yet backed up"}
         </p>
       </section>
-      <section className="panel">
-        <h2>This device</h2>
-        <p className="hint">
-          Open TutorTrack from its desktop shortcut. It works offline from the
-          first launch.
-        </p>
-        <p className="hint">
-          Records are saved automatically in your Windows account’s
-          TutorTrackPublic data folder. Use the File menu to locate it. Export a
-          backup before moving to another computer.
-        </p>
+      <section className="panel settings-data">
+        <div>
+          <h2>Data</h2>
+          <p className="hint">
+            Clearing records cannot be undone without a backup.
+          </p>
+        </div>
         <button className="danger" onClick={() => setClear(true)}>
           <Trash2 size={16} />
           Clear all local data
@@ -1848,5 +1700,72 @@ function SettingsPage({
         </Modal>
       )}
     </div>
+  );
+}
+
+function CourseManagement() {
+  const courses = useLiveQuery(() => db.courses.toArray()) || [];
+  const [showRemoved, setShowRemoved] = useState(false);
+  const [courseSearch, setCourseSearch] = useState("");
+  const [error, setError] = useState("");
+  return (
+    <section className="panel settings-courses">
+      <h2>Courses</h2>
+      <input
+        className="course-management-search"
+        aria-label="Search courses to remove"
+        placeholder="Search course name or code"
+        value={courseSearch}
+        onChange={(e) => setCourseSearch(e.target.value)}
+      />
+      <label className="checkbox">
+        <input
+          type="checkbox"
+          checked={showRemoved}
+          onChange={(e) => setShowRemoved(e.target.checked)}
+        />
+        Show removed courses
+      </label>
+      {error && <p role="alert">{error}</p>}
+      <div className="settings-course-list">
+        {courses
+          .filter(
+            (c) =>
+              (showRemoved || !c.archived) &&
+              courseLabel(c)
+                .toLowerCase()
+                .includes(courseSearch.trim().toLowerCase()),
+          )
+          .map((c) => (
+            <div className="section-line" key={c.id}>
+              <span>{courseLabel(c)}</span>
+              <button
+                type="button"
+                aria-label={
+                  (c.archived ? "Restore " : "Remove ") + courseLabel(c)
+                }
+                onClick={async () => {
+                  try {
+                    if (c.archived)
+                      await db.courses.update(c.id, { archived: false });
+                    else if (
+                      confirm(
+                        "Remove " +
+                          courseLabel(c) +
+                          " from course choices? Existing sessions will be kept.",
+                      )
+                    )
+                      await removeCourse(c.id);
+                  } catch (e) {
+                    setError(String(e));
+                  }
+                }}
+              >
+                {c.archived ? "Restore" : "Remove"}
+              </button>
+            </div>
+          ))}
+      </div>
+    </section>
   );
 }

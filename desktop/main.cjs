@@ -182,6 +182,7 @@ if (!app.requestSingleInstanceLock()) {
         ]),
       );
       win = new BrowserWindow({
+        autoHideMenuBar: true,
         width: 1366,
         height: 900,
         minWidth: 850,
