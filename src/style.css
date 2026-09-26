@@ -43,3 +43,10 @@ main:has(.dashboard-content){height:100vh;box-sizing:border-box;display:flex;fle
 .calendar .calendar-event .calendar-location{display:block;font-size:10px;color:#939eaf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;line-height:14px}
 .calendar .calendar-event strong{line-height:15px}.calendar .calendar-event span{line-height:14px}
 .settings-google{grid-column:1/-1}.settings-google .calendar-sync{margin-bottom:0}
+/* Stable columns across session lists and separately rendered history rows. */
+.session-row{display:grid;grid-template-columns:34px minmax(0,1fr) 155px 105px 16px;align-items:center}
+.session-row .session-date{display:block;width:155px;min-width:0;text-align:left;font-variant-numeric:tabular-nums}
+.session-row .session-date small{max-width:none}
+.session-row .session-pay{width:105px;min-width:0}
+.dashboard-content .session-row{grid-template-columns:34px minmax(0,1fr) 155px 16px}
+@media(max-width:650px){.session-row,.dashboard-content .session-row{grid-template-columns:30px minmax(0,1fr)}.session-row .session-date{grid-column:2;width:auto}.session-row .session-pay{grid-column:2;width:auto;text-align:left}.session-row>svg{display:none}}
