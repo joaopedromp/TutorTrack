@@ -2,7 +2,7 @@ import { startVitest } from "vitest/node";
 import ts from "typescript";
 const ctx = await startVitest(
   "test",
-  ["tests/data.test.ts", "tests/minimal-ui.test.tsx"],
+  ["tests"],
   {
     config: false,
     watch: false,

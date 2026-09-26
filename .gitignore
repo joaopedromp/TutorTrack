@@ -18,3 +18,7 @@ TutorTrack-*.json
 Thumbs.db
 .vercel/
 coverage/
+*.enc
+client_secret*.json
+credentials*.json
+google-calendar*.json
