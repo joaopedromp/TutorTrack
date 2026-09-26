@@ -7,6 +7,7 @@ export function CalendarSync({compact=false,onConnect}:{compact?:boolean;onConne
   const [status,setStatus]=useState<GoogleCalendarState>();
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
   const [report,setReport]=useState<ImportReport>();
+  useEffect(()=>{if(!report||report.issues.length)return;const timer=setTimeout(()=>setReport(undefined),4000);return()=>clearTimeout(timer);},[report]);
   const [setup,setSetup]=useState(false);
   const api=typeof window==='undefined'?undefined:window.tutortrack?.google;
   useEffect(()=>{let active=true;api?.status().then(value=>{if(active)setStatus(value);}).catch(()=>{if(active)setError('Google connection could not be loaded.');});return()=>{active=false;};},[api]);
