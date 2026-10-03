@@ -110,11 +110,11 @@ it("totals upcoming hours across pay-period boundaries without counting them as 
     })),
   );
   const html = screen("Dashboard");
-  expect(html).toContain('class="upcoming-summary">2.00');
-  expect(html).toContain('class="count-badge">2');
+  expect((html.match(/class="agenda-session"/g) || []).length).toBe(2);
+
   const metrics = html
-    .split('<div class="metrics dashboard-period-metrics">')[1]
-    .split('<div class="dashboard-bottom">')[0];
+    .split('aria-label="Current pay period">')[1]
+    .split('</section>')[0];
   expect(metrics).toContain("1.00");
   expect(metrics).toContain("$25.00");
 });
@@ -130,8 +130,8 @@ it("includes both weeks of the current pay period", () => {
   expect(html).toContain("Current pay period");
   expect(html).toContain("Jan 4 – Jan 17");
   const metrics = html
-    .split('<div class="metrics dashboard-period-metrics">')[1]
-    .split('<div class="dashboard-bottom">')[0];
+    .split('aria-label="Current pay period">')[1]
+    .split('</section>')[0];
   expect(metrics).toContain("3.00");
   expect(metrics).not.toContain("Gross earnings");
   expect(metrics).toContain("$67.50");
@@ -149,7 +149,8 @@ it("renders an empty dashboard without invented records", () => {
       settings: defaults,
     });
   const html = renderToStaticMarkup(<App />);
-  expect(html).toContain("No upcoming sessions");
+  expect(html).toContain("No upcoming student sessions");
   expect(html).toContain("No upcoming payday");
   expect(html).not.toContain("Example Learner");
 });
+
