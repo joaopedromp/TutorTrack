@@ -84,3 +84,24 @@ main:has(.dashboard-content){height:100vh;box-sizing:border-box;display:flex;fle
 .upcoming-title{display:flex;align-items:center;gap:8px}
 .upcoming-add{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;background:transparent;color:#8f9aaa;border-radius:6px}
 .upcoming-add:hover{background:transparent;color:#c3d2ff}
+
+/* Dashboard content alignment. */
+
+.dashboard-refreshed>.current-pay-summary{padding:28px 22px;align-items:center}
+.current-pay-summary>div:first-child,.current-pay-summary>.summary-amount{display:grid;grid-template-rows:36px 22px 18px;row-gap:5px;align-items:center}
+.current-pay-summary>div:first-child>.eyebrow{line-height:18px;margin:0}
+.current-pay-summary>div:first-child>h2,.current-pay-summary>div:first-child>.hint{margin:0}
+.current-pay-summary>.summary-amount>strong{line-height:36px}
+.current-pay-summary>.summary-amount>span{line-height:22px}
+.current-pay-summary>.summary-amount>small,.current-pay-summary .hint{line-height:18px}
+.current-pay-summary>.period-progress{display:grid;grid-template-rows:36px 22px 18px;row-gap:5px;padding:0;align-self:center}
+.current-pay-summary>.period-progress>div{grid-row:2;margin:0;line-height:22px;align-items:center}
+.current-pay-summary>.period-progress>progress{grid-row:3;align-self:center}
+.dashboard-refreshed .dashboard-bottom>.panel{padding:18px 22px 22px}
+.dashboard-refreshed .dashboard-bottom>.panel>.section-line{height:28px;min-height:28px;align-items:center;margin:0 0 17px}
+.dashboard-refreshed .dashboard-bottom>.panel>.section-line h2{margin:0;line-height:28px}
+.dashboard-refreshed .dashboard-bottom>.panel>.section-line .text-button{height:28px;padding-top:0;padding-bottom:0}
+
+/* Equal vertical distance from the date to the labels above and below. */
+.current-pay-summary>div:first-child{grid-template-rows:18px 22px 18px;row-gap:9.5px;align-self:center;height:86px;padding-top:9px}
+.current-pay-summary>div:first-child>h2{line-height:22px}
