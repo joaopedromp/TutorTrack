@@ -80,8 +80,8 @@ it("keeps session search and sorting without per-session earnings", () => {
 });
 it("offers only upcoming and paid statuses", () => {
   const html = screen("Payroll");
-  expect(html).toContain('value="paid"');
-  expect(html).toContain('value="upcoming"');
+  expect(html).toContain('data-status="paid"');
+  expect(html).toContain('data-status="upcoming"');
   expect(html).not.toContain('value="submitted"');
   expect(html).not.toContain('value="overdue"');
   expect(html).not.toContain("Actual deposit");

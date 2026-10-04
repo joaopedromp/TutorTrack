@@ -13,7 +13,7 @@ An offline desktop app for tracking tutoring sessions, students and pay.
 
 ## Latest update
 
-The current pay period leads the dashboard. Next paycheck is a small green reminder you can hide or reopen. Upcoming sessions start on All, with 1-on-1 and Walk-in filters beside it. Add a session with the + next to Upcoming.
+Session details are more compact, with direct Scheduled / Completed controls. Payment status saves with one click, and Paid stays green. Sessions open with the nearest upcoming work first; All, 1-on-1 and Walk-in filters keep the list easy to scan.
 
 The original dark colors, type and navigation icons are preserved. This repository starts empty and includes no personal records, pay settings, calendar credentials or private schedules. The Walk-in filter uses courses named “Walk-in tutoring”; it does not install a recurring schedule.
 
