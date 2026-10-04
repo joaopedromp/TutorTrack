@@ -149,8 +149,8 @@ it("renders an empty dashboard without invented records", () => {
       settings: defaults,
     });
   const html = renderToStaticMarkup(<App />);
-  expect(html).toContain("No upcoming student sessions");
-  expect(html).toContain("No upcoming payday");
+  expect(html).toContain("No upcoming sessions");
+  expect(html).not.toContain('aria-label="Next paycheck"');
   expect(html).not.toContain("Example Learner");
 });
 

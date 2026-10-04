@@ -68,3 +68,19 @@ main:has(.dashboard-content){height:100vh;box-sizing:border-box;display:flex;fle
 @media(max-width:1100px){.dashboard-refreshed>.dashboard-bottom{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}.dashboard-refreshed .dashboard-bottom>.panel{padding:18px}.dashboard-refreshed .session-row{grid-template-columns:30px minmax(0,1fr) 135px 12px;gap:8px}.dashboard-refreshed .session-date{width:135px!important}.dashboard-refreshed .agenda-session{grid-template-columns:80px minmax(0,1fr) 12px}}
 @media(max-width:900px){main:has(.dashboard-refreshed){height:auto;min-height:100vh;overflow:visible}.dashboard-refreshed>.dashboard-bottom{grid-template-columns:1fr}.dashboard-refreshed .upcoming-agenda{max-height:400px}.dashboard-refreshed>.dashboard-summary{grid-template-columns:1fr 1fr}.period-progress{grid-column:1/-1;margin-top:10px}.summary-action{grid-column:1/-1;justify-self:start}.dashboard-refreshed .session-row{grid-template-columns:30px minmax(0,1fr) 155px 16px}.dashboard-refreshed .session-date{width:155px!important}}
 @media(max-width:600px){.dashboard-refreshed>.dashboard-summary{padding:16px;gap:12px}.summary-amount strong{font-size:26px}.current-pay-summary .summary-amount strong{font-size:28px}.dashboard-refreshed .session-row{grid-template-columns:30px minmax(0,1fr)}.dashboard-refreshed .session-date{grid-column:2;width:auto!important}.upcoming-filters button{padding:7px 16px}}
+
+/* Compact, dismissible paycheck reminder. */
+.paycheck-reminder{position:relative;background:#18231e;border:1px solid #304639;border-radius:10px;padding:10px 30px 10px 13px}
+.paycheck-reminder-content{display:flex;flex-direction:column;align-items:flex-start;gap:4px;background:transparent;border:0;padding:0;border-radius:0}
+.paycheck-reminder-content:hover{background:transparent}
+.paycheck-reminder-label{display:flex;align-items:center;gap:7px;color:#a5bfae;font-size:12px;line-height:18px;font-weight:400}
+.paycheck-dot{width:5px;height:5px;border-radius:50%;background:#8caf96;display:inline-block;flex-shrink:0}
+.paycheck-reminder-detail{display:flex;align-items:center;gap:9px;font-size:14px;line-height:20px;font-weight:400;color:#d5e4d9;font-variant-numeric:tabular-nums;white-space:nowrap}
+.paycheck-separator{color:#728c7a}
+.paycheck-dismiss{position:absolute;top:4px;right:4px;width:22px;height:22px;display:grid;place-items:center;border:0;background:transparent;padding:0;color:#8eaa97}
+.paycheck-dismiss:hover{background:transparent;color:#eef5f0}
+.paycheck-reopen{display:flex;align-items:center;gap:7px;background:transparent;border:0;font-size:12px;color:#a5bfae;padding:8px}
+.paycheck-reopen:hover{background:transparent;color:#d5e4d9}
+.upcoming-title{display:flex;align-items:center;gap:8px}
+.upcoming-add{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;background:transparent;color:#8f9aaa;border-radius:6px}
+.upcoming-add:hover{background:transparent;color:#c3d2ff}
