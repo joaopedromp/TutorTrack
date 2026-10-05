@@ -13,7 +13,7 @@ An offline desktop app for tracking tutoring sessions, students and pay.
 
 ## Latest update
 
-Session details are more compact, with direct Scheduled / Completed controls. Payment status saves with one click. In Payroll and paycheck details, marking a payment Paid smoothly collapses the control to a small green button. Click Paid to change it back to Upcoming. Session completion now uses the same green checkmark, gentle animation and quiet two-note chime. Click Completed to switch back to Scheduled. A small clock opens worked-time adjustments. Reduced-motion preferences are respected; sounds do not play when existing records are opened. Sessions open with the nearest upcoming work first; All, 1-on-1 and Walk-in filters keep the list easy to scan.
+Payment and session status now show one compact button. Click to mark Paid or Completed, and click again to switch back; hover text explains the action. The green checkmark and quiet chime remain. Session details keep the same height when status changes, with the unused worked-time adjustment removed. Existing recorded hours are preserved. The current pay period card also has slightly tighter vertical spacing.
 
 The original dark colors, type and navigation icons are preserved. This repository starts empty and includes no personal records, pay settings, calendar credentials or private schedules. The Walk-in filter uses courses named “Walk-in tutoring”; it does not install a recurring schedule.
 

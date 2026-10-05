@@ -64,7 +64,7 @@ function SessionForm({session,close,students,courses,settings}:{session:Session|
   const original=session==='new'?undefined:session;
   const start=new Date();start.setMinutes(0,0,0);start.setHours(start.getHours()+1);
   const [s,setS]=useState<Session>(()=>original||{id:uid(),studentId:'',courseId:'',title:'Tutoring',scheduledStart:start.toISOString(),scheduledEnd:new Date(+start+3600000).toISOString(),actualStart:'',actualEnd:'',topics:'',notes:'',status:'scheduled',eventCancelled:false,updatedAt:now(),scheduleUpdatedAt:now(),deleted:false});
-  const [adjustHours,setAdjustHours]=useState(!!original&&!!(original.actualStart||original.actualEnd)&&(original.actualStart!==original.scheduledStart||original.actualEnd!==original.scheduledEnd));
+  const adjustHours=!!original&&!!(original.actualStart||original.actualEnd)&&(original.actualStart!==original.scheduledStart||original.actualEnd!==original.scheduledEnd);
   const [addingStudent,setAddingStudent]=useState(false);
   const [newName,setNewName]=useState('');
   const [newCourse,setNewCourse]=useState('');
@@ -84,7 +84,6 @@ function SessionForm({session,close,students,courses,settings}:{session:Session|
     </>:<><div className="student-choice"><select id="session-student" aria-label="Student / activity" required value={s.studentId} onChange={e=>{const student=students.find(x=>x.id===e.target.value);setS({...s,studentId:e.target.value,courseId:courses.find(c=>c.id===student?.courseId&&!c.archived)?.id||''});}}><option value="">Choose student</option>{students.filter(x=>!x.archived||x.id===s.studentId).map(x=><option value={x.id} key={x.id}>{x.name}{x.archived?' (archived)':''}</option>)}</select></div><CoursePicker courses={courses} value={s.courseId} onChange={id=>set('courseId',id)}/></>}
     <SessionSchedule start={s.scheduledStart} end={s.scheduledEnd} onChange={(scheduledStart,scheduledEnd)=>setS(prev=>({...prev,scheduledStart,scheduledEnd}))}/>
     <div className="compact-status-field"><span>Status</span><CompletionStatus label="Session status" done={s.status==='completed'} before="Scheduled" after="Completed" onChange={done=>set('status',done?'completed':'scheduled')}/></div>
-    {s.status==='completed'&&<><button type="button" className="worked-time-toggle" aria-label="Adjust worked time" title="Adjust worked time" aria-expanded={adjustHours} onClick={()=>{if(!adjustHours)setS(prev=>({...prev,actualStart:prev.actualStart||prev.scheduledStart,actualEnd:prev.actualEnd||prev.scheduledEnd}));setAdjustHours(!adjustHours)}}><Clock size={18}/></button>{adjustHours&&<SessionSchedule label="Actual" start={s.actualStart||s.scheduledStart} end={s.actualEnd||s.scheduledEnd} onChange={(actualStart,actualEnd)=>setS(prev=>({...prev,actualStart,actualEnd}))}/>}</>}
 
     <footer>{original&&<button type="button" className="icon danger" aria-label="Delete session" title="Delete session" disabled={saving} onClick={async()=>{if(confirm('Delete this session and its recorded hours?')){try{await deleteSession(original);close();}catch(e){setError(String(e));}}}}><Trash2 size={18}/></button>}<button type="button" onClick={close}>Cancel</button><button className="primary" disabled={saving}>{saving?'Saving…':'Save session'}</button></footer>
   </form></Modal>;

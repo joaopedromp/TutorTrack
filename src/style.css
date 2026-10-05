@@ -87,7 +87,7 @@ main:has(.dashboard-content){height:100vh;box-sizing:border-box;display:flex;fle
 
 /* Dashboard content alignment. */
 
-.dashboard-refreshed>.current-pay-summary{padding:28px 22px;align-items:center}
+.dashboard-refreshed>.current-pay-summary{padding:22px 22px;min-height:133px;align-items:center}
 .current-pay-summary>div:first-child,.current-pay-summary>.summary-amount{display:grid;grid-template-rows:36px 22px 18px;row-gap:5px;align-items:center}
 .current-pay-summary>div:first-child>.eyebrow{line-height:18px;margin:0}
 .current-pay-summary>div:first-child>h2,.current-pay-summary>div:first-child>.hint{margin:0}
@@ -133,3 +133,11 @@ main:has(.dashboard-content){height:100vh;box-sizing:border-box;display:flex;fle
 .completion-pulse{animation:completion-glow 750ms ease-out}@keyframes completion-glow{0%{box-shadow:0 0 0 0 #8eb99b40}45%{box-shadow:0 0 0 4px #8eb99b15}100%{box-shadow:0 0 0 7px #8eb99b00}}
 .worked-time-toggle{display:flex;align-items:center;background:transparent;border:0;padding:8px;color:#aab3c3}.worked-time-toggle:hover,.worked-time-toggle[aria-expanded=true]{background:transparent;color:#c3d2ff}
 @media(prefers-reduced-motion:reduce){.completion-segments,.completion-segments .completion-before,.completion-segments .completion-after,.completion-check{transition:none}.completion-pulse{animation:none}}
+/* Single status buttons: no hidden segment or leftover track. */
+.single-status{position:relative;width:max-content;max-width:100%}
+.single-status .single-status-button{height:30px;box-sizing:border-box;padding:0 11px;border:0;border-radius:6px;background:#303a50;color:#eef1f9;display:inline-flex;align-items:center;justify-content:center;gap:6px;vertical-align:middle;font-size:13px;line-height:18px;white-space:nowrap;transition:background-color 160ms,color 160ms}
+.single-status-button>span{display:block;line-height:18px;transform:translateY(-1px)}
+.single-status .single-status-button:hover{background:#3b4861}.single-status .single-status-button.done{background:#2d4537;color:#d9eddf}.single-status .single-status-button.done:hover{background:#385443}
+.single-status-check{flex-shrink:0}.single-status-button.changed{animation:single-status-pop 220ms ease-out}.single-status-button.changed .single-status-check{animation:single-status-check 220ms ease-out}
+@keyframes single-status-pop{from{transform:scale(.96)}to{transform:scale(1)}}@keyframes single-status-check{from{opacity:0;transform:translateY(3px) scale(.7)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){.single-status .single-status-button{transition:none}.single-status-button.changed,.single-status-button.changed .single-status-check{animation:none}}
