@@ -122,3 +122,14 @@ main:has(.dashboard-content){height:100vh;box-sizing:border-box;display:flex;fle
 .payment-undo{position:absolute;top:calc(100% + 6px);left:0;z-index:10;background:#25282e;border:1px solid #3b414b;border-radius:7px;padding:10px 13px;white-space:nowrap;color:#eef0f5;font-size:12px;box-shadow:0 6px 18px #0006}
 .payment-undo:hover{background:#30353e}
 @media(prefers-reduced-motion:reduce){.payment-segments.status-buttons,.payment-segments.status-buttons button{transition:none}}
+.completion-status{position:relative;width:max-content;min-width:230px;max-width:100%}.completion-status.payment-completion{min-width:181px}
+.completion-segments{display:flex;width:230px;box-sizing:border-box;padding:4px;background:#12151a;border-radius:9px;transition:width 420ms cubic-bezier(.2,.8,.2,1)}
+.completion-segments button{border:0;border-radius:6px;font-size:13px;line-height:20px;padding:8px 0;white-space:nowrap;flex-shrink:0;background:transparent;color:#b4bdca}
+.completion-segments .completion-before{width:100px;margin-right:3px;overflow:hidden;background:#303a50;color:#eef1f9;transition:opacity 260ms,width 420ms cubic-bezier(.2,.8,.2,1),margin 420ms}
+.completion-segments .completion-after{width:119px;display:flex;align-items:center;justify-content:center;gap:6px;transition:background 250ms,color 250ms}
+.completion-check{display:inline-flex;width:0;opacity:0;transform:scale(.5);overflow:hidden;transition:width 280ms,opacity 280ms,transform 350ms}.completion-check svg{flex-shrink:0}
+.is-done .completion-segments{width:127px}.is-done .completion-before{width:0;margin-right:0;opacity:0;pointer-events:none}.is-done .completion-after{background:#2d4537;color:#d9eddf}.is-done .completion-check{width:15px;opacity:1;transform:scale(1)}
+.payment-completion .completion-segments{width:181px}.payment-completion .completion-after{width:70px}.payment-completion.is-done .completion-segments{width:78px}
+.completion-pulse{animation:completion-glow 750ms ease-out}@keyframes completion-glow{0%{box-shadow:0 0 0 0 #8eb99b40}45%{box-shadow:0 0 0 4px #8eb99b15}100%{box-shadow:0 0 0 7px #8eb99b00}}
+.worked-time-toggle{display:flex;align-items:center;background:transparent;border:0;padding:8px;color:#aab3c3}.worked-time-toggle:hover,.worked-time-toggle[aria-expanded=true]{background:transparent;color:#c3d2ff}
+@media(prefers-reduced-motion:reduce){.completion-segments,.completion-segments .completion-before,.completion-segments .completion-after,.completion-check{transition:none}.completion-pulse{animation:none}}
