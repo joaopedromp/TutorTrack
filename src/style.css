@@ -141,3 +141,10 @@ main:has(.dashboard-content){height:100vh;box-sizing:border-box;display:flex;fle
 .single-status-check{flex-shrink:0}.single-status-button.changed{animation:single-status-pop 220ms ease-out}.single-status-button.changed .single-status-check{animation:single-status-check 220ms ease-out}
 @keyframes single-status-pop{from{transform:scale(.96)}to{transform:scale(1)}}@keyframes single-status-check{from{opacity:0;transform:translateY(3px) scale(.7)}to{opacity:1;transform:translateY(0) scale(1)}}
 @media(prefers-reduced-motion:reduce){.single-status .single-status-button{transition:none}.single-status-button.changed,.single-status-button.changed .single-status-check{animation:none}}
+.page-title-row{display:flex;align-items:center;gap:12px}.student-add-icon{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;padding:0;background:transparent;border:0;color:#929eae}.student-add-icon:hover{background:transparent;color:#c3d2ff}
+.compact-student-section{margin:0 0 24px}.student-group-heading{font-size:12px;font-weight:500;color:#a8b2c3;margin:0 0 10px;letter-spacing:0}
+.compact-student-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.compact-student-card{display:grid;grid-template-columns:32px minmax(0,1fr) 14px;align-items:center;gap:12px;min-height:90px;padding:17px 16px;background:#1c1f25;border:1px solid #303540;border-radius:10px;text-align:left;width:100%;color:#e8ebf1}
+.compact-student-card:hover{background:#22262d;border-color:#4b566b}.compact-student-avatar{width:32px;height:32px;border-radius:50%;background:#303747;color:#b7c5e8;display:flex;align-items:center;justify-content:center;font-size:11px}
+.compact-student-body{min-width:0}.compact-student-body strong{display:block;font-size:14px;font-weight:600;line-height:20px;overflow-wrap:anywhere}.compact-student-body small{display:block;font-size:12px;color:#aab5c7;line-height:18px;margin-top:5px;font-variant-numeric:tabular-nums}.compact-student-card>svg{color:#8793a7}
+@media(max-width:650px){.compact-student-grid{grid-template-columns:1fr}}
