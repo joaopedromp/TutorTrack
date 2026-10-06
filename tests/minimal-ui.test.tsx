@@ -91,9 +91,9 @@ it("retains backup controls and course search", () => {
   for (const label of [
     "Search courses to remove",
     "Deductions (%)",
-    "Export JSON",
-    "Import JSON",
-    "Import replaces current records.",
+    "Export",
+    "Restore",
+    "Restoring a backup replaces your current records.",
   ])
     expect(html).toContain(label);
 });

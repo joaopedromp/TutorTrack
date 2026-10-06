@@ -13,6 +13,9 @@ An offline desktop app for tracking tutoring sessions, students and pay.
 
 ## Latest update
 
+Settings now use a consistent single-column layout with compact earnings inputs, aligned calendar and backup actions, shorter course rows, and local-data controls under Advanced. Backup validation and deletion confirmation remain in place.
+
+
 Students now use compact, evenly aligned cards with names and completed hours, without fixed subjects. Students and Sessions have a small plus beside the heading; Payroll no longer shows Add session.
 
 

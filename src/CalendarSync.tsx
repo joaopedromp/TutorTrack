@@ -21,7 +21,7 @@ export function CalendarSync({compact=false,onConnect}:{compact?:boolean;onConne
   }
   return <section className={'calendar-sync'+(compact?' calendar-sync-compact':'')} aria-label="Google Calendar sync">
     <div className="inline">
-      <button className={compact?'text-button sync-trigger':'secondary'} title={busy?'Syncing…':status?.connected?'Sync Google Calendar':'Connect Google Calendar'} aria-label={busy?'Syncing Google Calendar':status?.connected?'Sync Google Calendar':'Connect Google Calendar'} aria-busy={busy} disabled={busy||!api||!status} onClick={()=>status?.connected?void sync():compact&&onConnect?onConnect():setSetup(!setup)}><RefreshCw size={compact?14:16}/>{!compact&&(busy?'Syncing…':status?.connected?'Sync Google Calendar':'Connect Google Calendar')}</button>
+      <button className={compact?'text-button sync-trigger':'secondary'} title={busy?'Syncing…':status?.connected?'Sync Google Calendar':'Connect Google Calendar'} aria-label={busy?'Syncing Google Calendar':status?.connected?'Sync Google Calendar':'Connect Google Calendar'} aria-busy={busy} disabled={busy||!api||!status} onClick={()=>status?.connected?void sync():compact&&onConnect?onConnect():setSetup(!setup)}><RefreshCw size={compact?14:16}/>{!compact&&(busy?'Syncing…':status?.connected?'Sync':'Connect Google Calendar')}</button>
       {!compact&&status?.connected&&<button className="text-button" disabled={busy} onClick={()=>setSetup(!setup)}>Connection</button>}
       {report&&<span className="sync-feedback" role="status">{report.added?`${report.added} event${report.added===1?'':'s'} added`:'No new events'}{report.issues.length?' · Review needed':''}</span>}
     </div>
