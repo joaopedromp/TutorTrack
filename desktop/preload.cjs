@@ -1,5 +1,6 @@
 const {contextBridge,ipcRenderer}=require('electron');
 contextBridge.exposeInMainWorld('tutortrack',{
+  safetyBackup:json=>ipcRenderer.invoke('safety-backup',json),
   saveBackup:(json,filename)=>ipcRenderer.invoke('save-backup',json,filename),
   google:{
     status:()=>ipcRenderer.invoke('google-status'),

@@ -58,8 +58,9 @@ const fixture = {
 function screen(page: string) {
   view.page = page;
   vi.mocked(useLiveQuery)
+    .mockReset()
     .mockReturnValue(fixture.courses)
-    .mockReturnValueOnce(fixture);
+    .mockReturnValueOnce(fixture.students).mockReturnValueOnce(fixture.courses).mockReturnValueOnce(fixture.sessions).mockReturnValueOnce(fixture.periods).mockReturnValueOnce(fixture.payments).mockReturnValueOnce(fixture.settings).mockReturnValueOnce(fixture.courses).mockReturnValueOnce(fixture.periods);
   return renderToStaticMarkup(<App />);
 }
 beforeEach(() => {
@@ -73,8 +74,8 @@ afterEach(() => vi.useRealTimers());
 it("keeps session search and sorting without per-session earnings", () => {
   const html = screen("Sessions");
   expect(html).toContain("Example Learner");
-  expect(html).toContain("Newest first");
-  expect(html).toContain("Oldest first");
+  expect(html).toContain("Filters");
+  expect(html).toContain('aria-expanded="false"');
   expect(html).not.toContain('type="date"');
   expect(html).not.toContain("$25.00");
 });
@@ -139,15 +140,10 @@ it("includes both weeks of the current pay period", () => {
 it("renders an empty dashboard without invented records", () => {
   view.page = "Dashboard";
   vi.mocked(useLiveQuery)
+    .mockReset()
     .mockReturnValue([])
-    .mockReturnValueOnce({
-      ...fixture,
-      students: [],
-      courses: [],
-      sessions: [],
-      periods: [],
-      settings: defaults,
-    });
+    .mockReturnValueOnce([]).mockReturnValueOnce([]).mockReturnValueOnce([])
+    .mockReturnValueOnce([]).mockReturnValueOnce([]).mockReturnValueOnce(defaults);
   const html = renderToStaticMarkup(<App />);
   expect(html).toContain("No upcoming sessions");
   expect(html).not.toContain('aria-label="Next paycheck"');

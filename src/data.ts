@@ -6,9 +6,9 @@ export const now=()=>new Date().toISOString();
 const id=z.string().min(1); const date=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v=>!isNaN(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v); const stamp=z.string().datetime({offset:true});
 export const courseSchema=z.object({id,name:z.string().trim().min(1),code:z.string().optional(),archived:z.boolean().optional()});
 export const courseLabel=(course?:{name:string;code?:string})=>course?(course.code?course.code+' — ':'')+course.name:'Choose course';
-export const studentSchema=z.object({id,name:z.string().trim().min(1),courseId:id,note:z.string(),archived:z.boolean(),createdAt:stamp});
+export const studentSchema=z.object({id,name:z.string().trim().min(1),courseId:z.string().default(''),kind:z.enum(['student','activity']).optional(),note:z.string(),archived:z.boolean(),createdAt:stamp});
 export const sessionSchema=z.object({id,studentId:z.string(),courseId:z.string(),title:z.string().trim().min(1).refine(v=>/\btutoring\b/i.test(v),'Title must contain Tutoring'),scheduledStart:stamp,scheduledEnd:stamp,actualStart:z.union([stamp,z.literal('')]),actualEnd:z.union([stamp,z.literal('')]),topics:z.string(),notes:z.string(),location:z.string().optional(),status:z.enum(['scheduled','completed','cancelled']),eventCancelled:z.boolean(),updatedAt:stamp,scheduleUpdatedAt:stamp,scheduledMinutes:z.number().int().nonnegative().optional(),actualMinutes:z.number().int().nonnegative().optional(),deleted:z.boolean().default(false)}).superRefine((s,c)=>{if(Date.parse(s.scheduledEnd)<=Date.parse(s.scheduledStart))c.addIssue({code:'custom',message:'Scheduled end must be after start'});if(s.status==='completed'&&(!s.actualStart||!s.actualEnd||!s.studentId||!s.courseId))c.addIssue({code:'custom',message:'Completed sessions need student, course and actual times'});if((s.actualStart&&!s.actualEnd)||(!s.actualStart&&s.actualEnd))c.addIssue({code:'custom',message:'Enter both actual times'});if(s.actualStart&&s.actualEnd&&Date.parse(s.actualEnd)<=Date.parse(s.actualStart))c.addIssue({code:'custom',message:'Actual end must be after start'});});
-export const periodSchema=z.object({id,start:date,end:date,weeks:z.tuple([date,date]),submit:date,pay:date});
+export const periodSchema=z.object({id,start:date,end:date,weeks:z.tuple([date,date]),submit:date,pay:date,rates:z.object({wage:z.number().min(0).max(10000),deduction:z.number().min(0).max(100)}).optional()});
 export const paymentSchema=z.object({id,periodId:id,status:z.enum(['upcoming','submitted','paid','overdue']),deposit:z.number().min(0).nullable(),depositDate:z.union([date,z.literal('')]),note:z.string()});
 export const settingsSchema=z.object({id:z.literal('settings'),wage:z.number().min(0).max(10000),deduction:z.number().min(0).max(100),deductionBasis:z.enum(['provisional','manual']).optional(),lastBackup:z.string(),lastSync:z.string(),connected:z.boolean(),calendarId:z.string()});
 export const syncSchema=z.object({id,sessionId:id,eventId:id,calendarId:id,remoteUpdated:z.string(),localUpdated:z.string(),syncedAt:z.string(),etag:z.string().optional(),importFingerprint:z.string().optional()});
@@ -28,20 +28,21 @@ export const minutes=(s:Session)=>!s.deleted&&s.status==='completed'?duration(s.
 export const periodFor=(s:Session,ps:Period[])=>s.status==='completed'&&s.actualStart?ps.find(p=>localDate(s.actualStart)>=p.start&&localDate(s.actualStart)<=p.end):undefined;
 export function totals(ss:Session[],settings:Settings){const mins=ss.reduce((n,s)=>n+minutes(s),0);const gross=Math.round(mins*settings.wage/60*100)/100;const deductions=Math.round(gross*settings.deduction)/100;return {mins,gross,deductions,net:Math.round((gross-deductions)*100)/100};}
 export const inRange=(s:Session,start:string,end:string)=>!!s.actualStart&&localDate(s.actualStart)>=start&&localDate(s.actualStart)<=end;
-export const money=(n:number)=>new Intl.NumberFormat('en-CA',{style:'currency',currency:'CAD'}).format(n);
+const moneyFormatter=new Intl.NumberFormat('en-CA',{style:'currency',currency:'CAD'});
+export const money=(n:number)=>moneyFormatter.format(n);
 export const hours=(n:number)=>(n/60).toFixed(2);
 export const fmtDate=(s:string)=>s?new Date(s.length===10?s+'T12:00:00':s).toLocaleDateString('en-CA',{month:'short',day:'numeric'}):'—';
 export const fmtTime=(s:string)=>s?new Date(s).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}).toLowerCase():'—';
 export async function courseId(name:string){const clean=name.trim();if(!clean)throw Error('Course is required');const match=(await db.courses.toArray()).find(c=>c.name.toLowerCase()===clean.toLowerCase());if(match)return match.id;const c={id:uid(),name:clean};await db.courses.add(c);return c.id;}
 const backupSchema=z.object({version:z.literal(1),exportedAt:stamp,students:z.array(studentSchema),courses:z.array(courseSchema),sessions:z.array(sessionSchema),periods:z.array(periodSchema),payments:z.array(paymentSchema),settings:settingsSchema,sync:z.array(syncSchema)});
-export function validateBackup(raw:unknown){const b=backupSchema.parse(raw);for(const list of [b.students,b.courses,b.sessions,b.periods,b.payments,b.sync])if(new Set(list.map(x=>x.id)).size!==list.length)throw Error('Duplicate record IDs');const has=(a:{id:string}[],s:string)=>a.some(v=>v.id===s);for(const s of b.students)if(!has(b.courses,s.courseId))throw Error('Missing student course');for(const s of b.sessions)if((s.studentId&&!has(b.students,s.studentId))||(s.courseId&&!has(b.courses,s.courseId)))throw Error('Missing session reference');if(JSON.stringify(b.periods.slice().sort((a,c)=>a.id.localeCompare(c.id)))!==JSON.stringify(seedPeriods.slice().sort((a,b)=>a.id.localeCompare(b.id))))throw Error('Payroll schedule does not match this build');for(const p of b.payments)if(!has(b.periods,p.periodId))throw Error('Missing payroll reference');if(new Set(b.payments.map(p=>p.periodId)).size!==b.payments.length)throw Error('Duplicate payments');for(const r of b.sync)if(!has(b.sessions,r.sessionId))throw Error('Missing sync session');if(new Set(b.sync.map(r=>r.sessionId)).size!==b.sync.length||new Set(b.sync.map(r=>r.calendarId+'|'+r.eventId)).size!==b.sync.length)throw Error('Duplicate sync mapping');return b;}
+export function validateBackup(raw:unknown){const b=backupSchema.parse(raw);for(const list of [b.students,b.courses,b.sessions,b.periods,b.payments,b.sync])if(new Set(list.map(x=>x.id)).size!==list.length)throw Error('Duplicate record IDs');const has=(a:{id:string}[],s:string)=>a.some(v=>v.id===s);for(const s of b.students)if(s.courseId&&!has(b.courses,s.courseId))throw Error('Missing student course');for(const s of b.sessions)if((s.studentId&&!has(b.students,s.studentId))||(s.courseId&&!has(b.courses,s.courseId)))throw Error('Missing session reference');validatePeriods(b.periods);for(const p of b.payments)if(!has(b.periods,p.periodId))throw Error('Missing payroll reference');if(new Set(b.payments.map(p=>p.periodId)).size!==b.payments.length)throw Error('Duplicate payments');for(const r of b.sync)if(!has(b.sessions,r.sessionId))throw Error('Missing sync session');if(new Set(b.sync.map(r=>r.sessionId)).size!==b.sync.length||new Set(b.sync.map(r=>r.calendarId+'|'+r.eventId)).size!==b.sync.length)throw Error('Duplicate sync mapping');return b;}
 export async function exportData(){return db.transaction('r',db.tables,async()=>({version:1,exportedAt:now(),students:await db.students.toArray(),courses:await db.courses.toArray(),sessions:await db.sessions.toArray(),periods:await db.periods.toArray(),payments:await db.payments.toArray(),settings:await db.settings.get('settings'),sync:await db.sync.toArray()}));}
 export async function importData(raw:unknown){const b=validateBackup(raw);await db.transaction('rw',db.tables,async()=>{for(const table of db.tables)await table.clear();await db.students.bulkPut(b.students);await db.courses.bulkPut(b.courses);await db.sessions.bulkPut(b.sessions);await db.periods.bulkPut(b.periods);await db.payments.bulkPut(b.payments);await db.sync.bulkPut(b.sync);await db.settings.put({...b.settings,connected:false});});await initialize();}
 export async function deleteSession(s:Session){if(await db.sync.where('sessionId').equals(s.id).first())await db.sessions.update(s.id,{deleted:true,eventCancelled:true,scheduleUpdatedAt:now(),updatedAt:now()});else await db.sessions.delete(s.id);}
 
 export function nextPaycheck(sessions:Session[],periods:Period[],payments:Payment[],settings:Settings,today=localDate(new Date())){
   const period=periods.filter(p=>p.pay>=today&&!payments.some(payment=>payment.periodId===p.id&&payment.status==='paid')).sort((a,b)=>a.pay.localeCompare(b.pay))[0];
-  return period?{period,...totals(sessions.filter(s=>periodFor(s,periods)?.id===period.id),settings)}:undefined;
+  return period?{period,...periodTotals(sessions.filter(s=>periodFor(s,periods)?.id===period.id),settings,period)}:undefined;
 }
 
 export function sessionWithHours(session:Session,adjustHours:boolean):Session{
@@ -68,4 +69,35 @@ export async function saveSessionEntry(session:Session,adjustHours:boolean,newSt
 export function shiftSessionStart(start:string,end:string,nextStart:string){const ms=Math.max(0,Date.parse(end)-Date.parse(start));return {start:nextStart,end:new Date(Date.parse(nextStart)+ms).toISOString()};}
 export async function removeCourse(id:string){await db.courses.update(id,{archived:true});}
 
-export async function setPaymentStatus(periodId:string,status:Payment['status'],note?:string){return db.transaction('rw',db.payments,db.periods,async()=>{if(!await db.periods.get(periodId))throw Error('Unknown payroll period');const existing=await db.payments.where('periodId').equals(periodId).first();const payment=paymentSchema.parse({...existing,id:existing?.id||uid(),periodId,status,deposit:existing?.deposit??null,depositDate:existing?.depositDate||'',note:note??existing?.note??''});await db.payments.put(payment);return payment;});}
+export async function setPaymentStatus(periodId:string,status:Payment['status'],note?:string){return db.transaction('rw',db.payments,db.periods,db.settings,async()=>{const period=await db.periods.get(periodId);if(!period)throw Error('Unknown payroll period');if(status==='paid'&&!period.rates){const settings=await db.settings.get('settings')||defaults;await db.periods.update(periodId,{rates:{wage:settings.wage,deduction:settings.deduction}});}const existing=await db.payments.where('periodId').equals(periodId).first();const payment=paymentSchema.parse({...existing,id:existing?.id||uid(),periodId,status,deposit:existing?.deposit??null,depositDate:existing?.depositDate||'',note:note??existing?.note??''});await db.payments.put(payment);return payment;});}
+
+// Legacy records retain their IDs and references; an explicit choice overrides the old name convention.
+export const isActivity=(student:Student)=>student.kind?student.kind==='activity':/^(math lab|walk-in tutoring|tutoring|training)$/i.test(student.name.trim());
+export const periodTotals=(sessions:Session[],settings:Settings,period:Period)=>totals(sessions,{...settings,...period.rates});
+export function validatePeriods(periods:Period[]){
+  const sorted=periods.slice().sort((a,b)=>a.start.localeCompare(b.start));
+  for(let i=0;i<sorted.length;i++){
+    const p=sorted[i];
+    if(p.start>p.end||p.submit<p.end||p.pay<p.end||p.weeks[0]<p.start||p.weeks[1]>p.end||p.weeks[0]>p.weeks[1])throw Error('Invalid payroll dates');
+    if(i&&sorted[i-1].end>=p.start)throw Error('Payroll periods must not overlap');
+  }
+}
+export async function saveEarnings(value:Settings){
+  const checked=settingsSchema.parse(value);
+  return db.transaction('rw',db.settings,db.periods,db.payments,async()=>{
+    const previous=await db.settings.get('settings')||defaults;
+    if(previous.wage!==checked.wage||previous.deduction!==checked.deduction){
+      const paid=new Set((await db.payments.toArray()).filter(p=>p.status==='paid').map(p=>p.periodId));
+      for(const period of await db.periods.toArray())if(!period.rates&&(period.end<localDate(new Date())||paid.has(period.id)))await db.periods.update(period.id,{rates:{wage:previous.wage,deduction:previous.deduction}});
+    }
+    await db.settings.put(checked);
+  });
+}
+export async function savePayrollPeriod(period:Period){
+  const checked=periodSchema.parse(period);
+  return db.transaction('rw',db.periods,async()=>{
+    if(await db.periods.get(checked.id))throw Error('This period already exists');
+    validatePeriods([...(await db.periods.toArray()),checked]);
+    await db.periods.add(checked);
+  });
+}

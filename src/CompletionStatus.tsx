@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {Check} from 'lucide-react';
 import {prepareCompletionSound,playCompletionSound} from './completionSound';
 
-export function CompletionStatus({label,done,before,after,onChange}:{label:string;done:boolean;before:string;after:string;onChange:(done:boolean)=>void|Promise<unknown>}){
+export function CompletionStatus({label,done,before,after,onChange,sound=true}:{label:string;done:boolean;before:string;after:string;onChange:(done:boolean)=>void|Promise<unknown>;sound?:boolean}){
   const button=useRef<HTMLButtonElement>(null),lock=useRef(false);
 
   const [visibleDone,setVisibleDone]=useState(done);
@@ -11,8 +11,8 @@ export function CompletionStatus({label,done,before,after,onChange}:{label:strin
   async function change(next:boolean){
     if(lock.current||next===visibleDone)return;
     lock.current=true;setBusy(true);setError('');setPulse(next);setVisibleDone(next);
-    if(next)prepareCompletionSound();
-    try{await onChange(next);if(next)playCompletionSound()}
+    if(next&&sound)prepareCompletionSound();
+    try{await onChange(next);if(next&&sound)playCompletionSound()}
     catch(e){setVisibleDone(done);setPulse(false);setError(e instanceof Error?e.message:String(e))}
     finally{lock.current=false;setBusy(false);button.current?.focus()}
   }

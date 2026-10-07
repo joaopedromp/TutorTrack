@@ -42,6 +42,17 @@ app.whenReady().then(async()=>{
     await fs.writeFile(result.filePath,json,'utf8');
     return true;
   });
+  ipcMain.handle('safety-backup',async(event,json)=>{
+    if(event.sender!==win.webContents||event.senderFrame!==win.webContents.mainFrame||!local(event.senderFrame.url))throw Error('Forbidden');
+    if(typeof json!=='string'||Buffer.byteLength(json)>50*1024*1024)throw Error('Invalid backup');
+    const backup=JSON.parse(json);
+    if(backup.version!==1||!Array.isArray(backup.sessions)||!Array.isArray(backup.students))throw Error('Invalid backup');
+    const folder=path.join(dataPath,'Backups','Automatic');
+    await fs.mkdir(folder,{recursive:true});
+    const filename='TutorTrack-'+new Date().toISOString().replace(/[:.]/g,'-')+'-'+require('node:crypto').randomUUID()+'.json';
+    await fs.writeFile(path.join(folder,filename),json,{encoding:'utf8',flag:'wx'});
+    return true;
+  });
   const google=require('./google-calendar.cjs').createGoogleCalendar({safeStorage,shell,dialog,getWindow:()=>win,dataPath});
   for(const method of ['status','importClient','connect','calendars','select','disconnect','events'])ipcMain.handle('google-'+method,async(event,...args)=>{
     if(event.sender!==win.webContents||event.senderFrame!==win.webContents.mainFrame||!local(event.senderFrame.url))throw Error('Forbidden');
